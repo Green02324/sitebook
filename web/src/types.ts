@@ -76,7 +76,6 @@ export interface DashboardResponse {
 }
 
 export interface DashboardBreakdown {
-  creditCents: number;
   debits: { name: string; amountCents: number }[];
 }
 

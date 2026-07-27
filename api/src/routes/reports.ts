@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma";
 import { ah } from "../lib/asyncHandler";
 import { requireAuth, withEffectiveUser } from "../lib/auth";
 import { profitPercent } from "../lib/money";
+import { projectAttributedYear } from "../lib/projectYear";
 import {
   buildAnnualSummaryPdf,
   buildAnnualDetailedPdf,
@@ -31,29 +32,30 @@ async function contractorName(userId: string): Promise<string> {
 async function buildSummary(userId: string, req: Request): Promise<AnnualSummaryData> {
   const { year, yearStart, yearEnd } = yearRange(req);
 
-  const projects = await prisma.project.findMany({ where: { userId }, orderBy: { createdAt: "asc" } });
-  const transactions = await prisma.transaction.findMany({
-    where: { mode: "ACTUAL", date: { gte: yearStart, lt: yearEnd }, project: { userId } },
-    select: { type: true, amountCents: true, projectId: true },
+  // A project belongs to a single year (its completion/target year); once
+  // in scope, ALL of its transactions count — not just ones dated within
+  // this calendar year — matching the dashboard's attribution model.
+  const projects = await prisma.project.findMany({
+    where: { userId },
+    orderBy: { createdAt: "asc" },
+    include: { transactions: { where: { mode: "ACTUAL" }, select: { type: true, amountCents: true } } },
   });
+  const projectsThisYear = projects.filter((p) => projectAttributedYear(p) === year);
 
-  const byProject = new Map<string, { incomeCents: number; expenseCents: number }>();
-  for (const tx of transactions) {
-    const bucket = byProject.get(tx.projectId) ?? { incomeCents: 0, expenseCents: 0 };
-    if (tx.type === "CREDIT") bucket.incomeCents += tx.amountCents;
-    else bucket.expenseCents += tx.amountCents;
-    byProject.set(tx.projectId, bucket);
-  }
-
-  const projectLines = projects.map((p) => {
-    const bucket = byProject.get(p.id) ?? { incomeCents: 0, expenseCents: 0 };
+  const projectLines = projectsThisYear.map((p) => {
+    let incomeCents = 0;
+    let expenseCents = 0;
+    for (const tx of p.transactions) {
+      if (tx.type === "CREDIT") incomeCents += tx.amountCents;
+      else expenseCents += tx.amountCents;
+    }
     return {
       name: p.name,
       status: p.status,
-      incomeCents: bucket.incomeCents,
-      expenseCents: bucket.expenseCents,
-      netCents: bucket.incomeCents - bucket.expenseCents,
-      profitPct: profitPercent(bucket.incomeCents, bucket.expenseCents),
+      incomeCents,
+      expenseCents,
+      netCents: incomeCents - expenseCents,
+      profitPct: profitPercent(incomeCents, expenseCents),
     };
   });
 
@@ -70,11 +72,12 @@ async function buildSummary(userId: string, req: Request): Promise<AnnualSummary
 async function buildDetailed(userId: string, req: Request): Promise<AnnualDetailedData> {
   const { year, yearStart, yearEnd } = yearRange(req);
 
-  const projects = await prisma.project.findMany({ where: { userId }, orderBy: { createdAt: "asc" } });
+  const allProjects = await prisma.project.findMany({ where: { userId }, orderBy: { createdAt: "asc" } });
+  const projects = allProjects.filter((p) => projectAttributedYear(p) === year);
   const projectLines = await Promise.all(
     projects.map(async (p) => {
       const transactions = await prisma.transaction.findMany({
-        where: { projectId: p.id, mode: "ACTUAL", date: { gte: yearStart, lt: yearEnd } },
+        where: { projectId: p.id, mode: "ACTUAL" },
         include: { category: true },
         orderBy: { date: "asc" },
       });

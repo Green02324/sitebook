@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { formatCents } from "../lib/money";
+import { formatCents, formatPercent } from "../lib/money";
 
 export interface DonutExpenseSlice {
   key: string;
@@ -9,7 +9,6 @@ export interface DonutExpenseSlice {
 }
 
 export interface DonutDetail {
-  creditCents: number;
   debits: { name: string; amountCents: number }[];
 }
 
@@ -72,11 +71,10 @@ export function DonutChart({ totalIncomeCents, netCents, incomeColor = DEFAULT_I
   }
 
   const activeSlice = visibleSlices.find((s) => s.key === activeKey);
+  // Debit-only breakdown — the sub-donut shows what a project/overhead cost,
+  // never what it earned.
   const subItems = detail
-    ? [
-        ...(detail.creditCents > 0 ? [{ name: "Credits", amountCents: detail.creditCents, color: incomeColor }] : []),
-        ...detail.debits.filter((d) => d.amountCents > 0).map((d, i) => ({ name: d.name, amountCents: d.amountCents, color: SUB_PALETTE[i % SUB_PALETTE.length] })),
-      ]
+    ? detail.debits.filter((d) => d.amountCents > 0).map((d, i) => ({ name: d.name, amountCents: d.amountCents, color: SUB_PALETTE[i % SUB_PALETTE.length] }))
     : [];
   const subTotal = subItems.reduce((s, i) => s + i.amountCents, 0);
   const subDenominator = Math.max(subTotal, 1);
@@ -89,6 +87,7 @@ export function DonutChart({ totalIncomeCents, netCents, incomeColor = DEFAULT_I
   });
 
   const showingDetail = Boolean(activeKey) && !loading && subItems.length > 0;
+  const netPct = totalIncomeCents > 0 ? (netCents / totalIncomeCents) * 100 : null;
 
   return (
     <div className="flex flex-col items-center gap-5">
@@ -155,6 +154,7 @@ export function DonutChart({ totalIncomeCents, netCents, incomeColor = DEFAULT_I
             <>
               <div className="text-xs font-semibold text-slate-500">Net Profit</div>
               <div className={`text-2xl font-bold tracking-tight ${netCents >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{formatCents(netCents)}</div>
+              <div className={`text-sm font-semibold ${netCents >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{formatPercent(netPct)}</div>
               <div className="text-xs text-slate-500">of {formatCents(totalIncomeCents)} income</div>
             </>
           )}
