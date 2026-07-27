@@ -1,19 +1,22 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { api, fetchBlob } from "../api";
 import { useView, withViewParams } from "../context/ViewContext";
 import { formatCents } from "../lib/money";
-import type { Project, ReportResponse } from "../types";
+import type { ReportResponse } from "../types";
+
+function basePath(readOnly: boolean, targetUserId: string): string {
+  return readOnly ? `/admin/users/${targetUserId}` : "";
+}
 
 export function ReportPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const view = useView();
-  const [project, setProject] = useState<Project | null>(null);
   const [report, setReport] = useState<ReportResponse | null>(null);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [loading, setLoading] = useState(true);
-  const [downloading, setDownloading] = useState(false);
+  const [opening, setOpening] = useState(false);
 
   function reportPath(): string {
     const params = new URLSearchParams();
@@ -31,26 +34,24 @@ export function ReportPage() {
       .finally(() => setLoading(false));
   }
 
-  useEffect(() => {
-    api.get<Project>(withViewParams(`/projects/${projectId}`, view)).then(setProject);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, view.targetUserId, view.readOnly]);
-
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, [projectId, view.targetUserId, view.readOnly]);
 
-  async function handleDownload() {
-    setDownloading(true);
+  async function handleView() {
+    // Open the tab synchronously, in direct response to the click, so the
+    // browser doesn't treat it as a popup once the async fetch resolves.
+    const pdfWindow = window.open("", "_blank");
+    setOpening(true);
     try {
       const blob = await fetchBlob(withViewParams(reportPath().replace("/report", "/report/pdf"), view));
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${project?.name ?? "report"}-report.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
+      if (pdfWindow) {
+        pdfWindow.location.href = url;
+      } else {
+        window.location.href = url;
+      }
     } finally {
-      setDownloading(false);
+      setOpening(false);
     }
   }
 
@@ -59,12 +60,20 @@ export function ReportPage() {
   const totalCredits = report.credits.reduce((s, c) => s + c.subtotalCents, 0);
   const totalDebits = report.debits.reduce((s, d) => s + d.subtotalCents, 0);
 
+  const prefix = basePath(view.readOnly, view.targetUserId);
+
   return (
     <div className="flex flex-col gap-6">
+      <div>
+        <Link to={`${prefix}/projects/${projectId}`} className="text-sm font-medium text-indigo-600 hover:underline">
+          ← Back to project
+        </Link>
+      </div>
+
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-900">{report.projectName} — Report</h1>
-        <button onClick={handleDownload} disabled={downloading} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-          {downloading ? "Preparing…" : "Download PDF"}
+        <button onClick={handleView} disabled={opening} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+          {opening ? "Preparing…" : "View PDF"}
         </button>
       </div>
 
