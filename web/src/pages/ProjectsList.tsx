@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useView, withViewParams } from "../context/ViewContext";
@@ -6,6 +6,7 @@ import { Modal } from "../components/Modal";
 import { ProjectForm, type ProjectFormPayload } from "../components/ProjectForm";
 import { ProjectStatusBadge } from "../components/ProjectStatusBadge";
 import { BackLink } from "../components/BackLink";
+import { SORT_OPTIONS, sortProjects, type SortKey } from "../lib/sortProjects";
 import type { Project } from "../types";
 
 function basePath(readOnly: boolean, targetUserId: string): string {
@@ -18,6 +19,9 @@ export function ProjectsList() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+
+  const sortedProjects = useMemo(() => sortProjects(projects, sortKey), [projects, sortKey]);
 
   function load() {
     setLoading(true);
@@ -51,20 +55,37 @@ export function ProjectsList() {
         <BackLink to={`${prefix}/dashboard`} />
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-slate-900">Projects</h1>
-        {!view.readOnly && (
-          <button onClick={() => setShowCreate(true)} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">
-            New Project
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          <label htmlFor="project-sort" className="text-sm font-medium text-slate-600">
+            Sort by
+          </label>
+          <select
+            id="project-sort"
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as SortKey)}
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700"
+          >
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.key} value={o.key}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          {!view.readOnly && (
+            <button onClick={() => setShowCreate(true)} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">
+              New Project
+            </button>
+          )}
+        </div>
       </div>
 
       {loading ? (
         <div className="text-sm text-slate-500">Loading…</div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {projects.map((p) => (
+          {sortedProjects.map((p) => (
             <Link
               key={p.id}
               to={`${prefix}/projects/${p.id}`}
@@ -90,6 +111,7 @@ export function ProjectsList() {
               </div>
               {p.description && <p className="line-clamp-2 text-sm text-slate-500">{p.description}</p>}
               {p.clientName && <span className="text-xs text-slate-500">Client: {p.clientName}</span>}
+              {p.address && <span className="text-xs text-slate-500">{p.address}</span>}
               <span className="text-xs text-slate-400">{p._count?.transactions ?? 0} transactions</span>
             </Link>
           ))}

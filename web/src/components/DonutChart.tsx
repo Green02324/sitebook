@@ -96,8 +96,10 @@ export function DonutChart({ totalIncomeCents, netCents, slices, loadDetail }: D
 
   return (
     <div className="flex flex-col items-center gap-5">
-      <div className="relative" style={{ width: SIZE, height: SIZE }}>
-        <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ transform: "rotate(-90deg)" }}>
+      {/* Scales down to the container on narrow phones instead of overflowing
+          the card; SIZE stays the cap so it never blows up on desktop. */}
+      <div className="relative aspect-square w-full" style={{ maxWidth: SIZE }}>
+        <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="h-full w-full" style={{ transform: "rotate(-90deg)" }}>
           <circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} fill="none" stroke={LEFTOVER_COLOR} strokeWidth={STROKE} />
           {expenseSegments.map((seg) => (
             <circle
@@ -135,7 +137,6 @@ export function DonutChart({ totalIncomeCents, netCents, slices, loadDetail }: D
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-2 text-center">
           {activeKey ? (
             <>
-              <div className="text-xs font-semibold text-slate-500">{activeSlice?.label ?? "Overhead"}</div>
               <div className="text-2xl font-bold tracking-tight text-slate-900">{loading ? "…" : formatCents(subTotal)}</div>
               <button
                 onClick={() => toggle(activeKey)}
@@ -155,6 +156,13 @@ export function DonutChart({ totalIncomeCents, netCents, slices, loadDetail }: D
         </div>
       </div>
 
+      {/* The drilled-in project's name sits under the rings rather than in the
+          middle of the sub-donut — long job names have no room to wrap inside
+          the inner circle without colliding with the amount. */}
+      {activeKey && (
+        <div className="max-w-xs text-center text-base font-semibold text-slate-900">{activeSlice?.label ?? "Overhead"}</div>
+      )}
+
       {showingDetail && (
         <div className="flex w-full max-w-xs flex-col gap-1.5 rounded-xl border border-slate-200 bg-white p-3.5">
           {subSegments.map((item) => (
@@ -172,7 +180,7 @@ export function DonutChart({ totalIncomeCents, netCents, slices, loadDetail }: D
       <div className="flex flex-wrap justify-center gap-2.5">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700">
           <span className="h-2.5 w-2.5 rounded-full" style={{ background: LEFTOVER_COLOR }} />
-          Total Income · {formatCents(totalIncomeCents)}
+          Gross Income · {formatCents(totalIncomeCents)}
         </span>
         {visibleSlices.map((s) => (
           <button

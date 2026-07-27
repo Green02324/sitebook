@@ -2,8 +2,24 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover is what makes env(safe-area-inset-*) report real
+         values, so the app shell can pad around the notch and home indicator. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0f172a" />
+    <meta name="description" content="Job costing and profit tracking for contractors." />
+
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- iOS ignores the manifest's display mode on older versions: without
+         apple-mobile-web-app-capable, "Add to Home Screen" launches inside
+         normal Safari chrome instead of standalone. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="SiteBook" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+
     <title>SiteBook</title>
   </head>
   <body>

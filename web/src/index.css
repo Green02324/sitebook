@@ -1,1 +1,27 @@
 @import "tailwindcss";
+
+/* Standalone (home-screen) mode hands the app the whole display, notch and
+   home indicator included, so the shell has to inset its own edges. These are
+   no-ops in a normal browser tab, where the insets resolve to 0. */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@utility px-safe {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+html {
+  /* Stop iOS from inflating body text when the device rotates. */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  /* Kill the rubber-band bounce behind the shell — it's the clearest "this is
+     really a web page" tell once the app is running from the home screen. */
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}

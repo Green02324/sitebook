@@ -70,7 +70,7 @@ export function ReportPage() {
         </Link>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-slate-900">{report.projectName} — Report</h1>
         <button onClick={handleView} disabled={opening} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
           {opening ? "Preparing…" : "View PDF"}

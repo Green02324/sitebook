@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma";
 import { ah } from "../lib/asyncHandler";
 import { requireAuth, requireAdmin, toSafeUser } from "../lib/auth";
-import { createUserByAdmin } from "../lib/users";
+import { createUserByAdmin, resetUserPassword } from "../lib/users";
 
 const router = Router();
 router.use(requireAuth);
@@ -71,6 +71,47 @@ router.get(
   }),
 );
 
+// On-disk size of a table including its indexes, straight from Postgres. The
+// table names are a fixed internal list, never user input.
+async function relationSize(table: string): Promise<number> {
+  const rows = await prisma.$queryRawUnsafe<{ size: bigint }[]>(`SELECT pg_total_relation_size('"${table}"') AS size`);
+  return Number(rows[0]?.size ?? 0);
+}
+
+// Registered before "/:id" — otherwise "storage" is swallowed as a user id.
+router.get(
+  "/storage",
+  requireAdmin,
+  ah(async (_req, res) => {
+    const capacityGb = Number(process.env.STORAGE_CAPACITY_GB) || 5;
+    const capacityBytes = capacityGb * 1024 ** 3;
+
+    const dbRows = await prisma.$queryRaw<{ size: bigint }[]>`SELECT pg_database_size(current_database()) AS size`;
+    const usedBytes = Number(dbRows[0]?.size ?? 0);
+
+    const [transactions, projects, categories, overheadExpenses, overheadCategories, users, refreshTokens] = await Promise.all([
+      relationSize("Transaction"),
+      relationSize("Project"),
+      relationSize("Category"),
+      relationSize("OverheadExpense"),
+      relationSize("OverheadCategory"),
+      relationSize("User"),
+      relationSize("RefreshToken"),
+    ]);
+
+    const breakdown = [
+      { label: "Transactions", bytes: transactions, color: "#0a84ff" },
+      { label: "Projects", bytes: projects + categories, color: "#ff9500" },
+      { label: "Overhead", bytes: overheadExpenses + overheadCategories, color: "#af52de" },
+      { label: "Accounts & sessions", bytes: users + refreshTokens, color: "#34c759" },
+    ];
+    const accounted = breakdown.reduce((sum, b) => sum + b.bytes, 0);
+    breakdown.push({ label: "System & overhead", bytes: Math.max(0, usedBytes - accounted), color: "#8e8e93" });
+
+    res.json({ capacityBytes, usedBytes, breakdown });
+  }),
+);
+
 router.get(
   "/:id",
   requireAdmin,
@@ -100,6 +141,57 @@ router.post(
     }
     const { user, tempPassword } = await createUserByAdmin(email, name);
     res.status(201).json({ user: toSafeUser(user), tempPassword });
+  }),
+);
+
+router.put(
+  "/:id",
+  requireAdmin,
+  ah(async (req, res) => {
+    const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!target) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    const { name, email } = req.body as { name?: string; email?: string };
+    const data: { name?: string; email?: string } = {};
+    if (name !== undefined) {
+      if (!name.trim()) {
+        res.status(400).json({ error: "Name cannot be empty" });
+        return;
+      }
+      data.name = name.trim();
+    }
+    if (email !== undefined) {
+      if (!email.trim()) {
+        res.status(400).json({ error: "Email cannot be empty" });
+        return;
+      }
+      const clash = await prisma.user.findUnique({ where: { email: email.trim() } });
+      if (clash && clash.id !== target.id) {
+        res.status(409).json({ error: "Email already in use" });
+        return;
+      }
+      data.email = email.trim();
+    }
+    const user = await prisma.user.update({ where: { id: target.id }, data });
+    res.json(toSafeUser(user));
+  }),
+);
+
+// There is no "read the current password" counterpart: passwords are stored
+// only as bcrypt hashes. This issues a new one and returns it once.
+router.post(
+  "/:id/reset-password",
+  requireAdmin,
+  ah(async (req, res) => {
+    const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!target) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    const tempPassword = await resetUserPassword(target.id);
+    res.json({ email: target.email, tempPassword });
   }),
 );
 

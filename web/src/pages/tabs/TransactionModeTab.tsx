@@ -8,19 +8,46 @@ import { formatCents, formatPercent, profitPercent, centsToInputValue } from "..
 import type { ProjectDetailContext } from "../ProjectDetail";
 import type { Category, Transaction, TransactionMode, TransactionType } from "../../types";
 
+// The three fields are one relationship seen from three sides:
+//   price = cost + profit$        profit% = profit$ / price
+// Editing any one field solves for the other two, so a contractor can work
+// from whichever number they actually have in mind — "I want 20% on this",
+// "I need to clear $8k", or "I'm quoting $40k, what does that leave me?".
+// The percentage is margin on price, matching how profitPercent reports
+// actuals everywhere else in the app.
 function EstimateProfitCalculator({ costCents }: { costCents: number }) {
   const [pctInput, setPctInput] = useState("");
+  const [profitInput, setProfitInput] = useState("");
   const [revenueInput, setRevenueInput] = useState("");
 
   function handlePctChange(value: string) {
     setPctInput(value);
     const pct = Number(value);
+    // At 100% margin the price would have to be infinite; above it, negative.
     if (value.trim() === "" || !Number.isFinite(pct) || pct >= 100) {
+      setProfitInput("");
       setRevenueInput("");
       return;
     }
-    const revenueCents = costCents / (1 - pct / 100);
-    setRevenueInput(centsToInputValue(Math.round(revenueCents)));
+    const revenueCents = Math.round(costCents / (1 - pct / 100));
+    setRevenueInput(centsToInputValue(revenueCents));
+    setProfitInput(centsToInputValue(revenueCents - costCents));
+  }
+
+  // A negative target is allowed here — it just means quoting below cost, and
+  // the resulting negative percentage says so plainly.
+  function handleProfitChange(value: string) {
+    setProfitInput(value);
+    const profit = Number(value);
+    if (value.trim() === "" || !Number.isFinite(profit)) {
+      setPctInput("");
+      setRevenueInput("");
+      return;
+    }
+    const revenueCents = costCents + Math.round(profit * 100);
+    setRevenueInput(centsToInputValue(revenueCents));
+    const pct = profitPercent(revenueCents, costCents);
+    setPctInput(pct === null ? "" : pct.toFixed(1));
   }
 
   function handleRevenueChange(value: string) {
@@ -28,9 +55,11 @@ function EstimateProfitCalculator({ costCents }: { costCents: number }) {
     const revenue = Number(value);
     if (value.trim() === "" || !Number.isFinite(revenue) || revenue <= 0) {
       setPctInput("");
+      setProfitInput("");
       return;
     }
     const revenueCents = Math.round(revenue * 100);
+    setProfitInput(centsToInputValue(revenueCents - costCents));
     const pct = profitPercent(revenueCents, costCents);
     setPctInput(pct === null ? "" : pct.toFixed(1));
   }
@@ -41,7 +70,7 @@ function EstimateProfitCalculator({ costCents }: { costCents: number }) {
         <h3 className="text-sm font-semibold text-slate-900">Profit Calculator</h3>
         <span className="text-xs text-slate-500">Estimated cost: {formatCents(costCents)}</span>
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <label className="text-sm font-medium text-slate-700">
           Target Profit %
           <input
@@ -50,6 +79,17 @@ function EstimateProfitCalculator({ costCents }: { costCents: number }) {
             value={pctInput}
             onChange={(e) => handlePctChange(e.target.value)}
             placeholder="e.g. 20"
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+          />
+        </label>
+        <label className="text-sm font-medium text-slate-700">
+          Target Profit $
+          <input
+            type="number"
+            step="0.01"
+            value={profitInput}
+            onChange={(e) => handleProfitChange(e.target.value)}
+            placeholder="0.00"
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
           />
         </label>
@@ -66,8 +106,8 @@ function EstimateProfitCalculator({ costCents }: { costCents: number }) {
         </label>
       </div>
       <p className="mt-2 text-xs text-slate-500">
-        Enter either field and the other updates automatically. This is just a planning tool — add an estimate credit yourself once you've decided what to
-        charge.
+        Fill in any one field and the other two update automatically. This is just a planning tool — add an estimate credit yourself once you've decided what
+        to charge.
       </p>
     </div>
   );

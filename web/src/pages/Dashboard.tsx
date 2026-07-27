@@ -62,7 +62,7 @@ export function Dashboard() {
         <YearSelector years={data.availableYears} value={data.year} onChange={setYear} />
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-6">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
         <DonutChart totalIncomeCents={data.totalIncomeCents} netCents={netCents} slices={slices} loadDetail={loadDetail} />
       </div>
 

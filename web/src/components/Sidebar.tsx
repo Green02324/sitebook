@@ -124,19 +124,19 @@ export function Sidebar() {
   if (isMobile) {
     return (
       <>
-        <div className="flex items-center justify-between bg-slate-900 px-4 py-3 text-white">
+        <div className="flex shrink-0 items-center justify-between bg-slate-900 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] text-white">
           <span className="text-lg font-bold tracking-tight">SiteBook</span>
-          <button onClick={() => setMobileOpen((o) => !o)} aria-label="Toggle menu" className="text-2xl leading-none">
+          <button onClick={() => setMobileOpen((o) => !o)} aria-label="Toggle menu" className="p-1 text-2xl leading-none">
             {mobileOpen ? "✕" : "☰"}
           </button>
         </div>
         {mobileOpen && (
           <div className="fixed inset-0 z-50 bg-black/40" onClick={() => setMobileOpen(false)}>
             <div
-              className="flex h-full w-64 flex-col bg-slate-900 text-slate-200 shadow-xl"
+              className="flex h-full w-64 flex-col overflow-y-auto bg-slate-900 pb-safe text-slate-200 shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="px-4 py-5 text-lg font-bold tracking-tight text-white">SiteBook</div>
+              <div className="px-4 pb-5 pt-[calc(env(safe-area-inset-top)+1.25rem)] text-lg font-bold tracking-tight text-white">SiteBook</div>
               <NavContent prefix={prefix} isAdmin={isAdmin} readOnly={view.readOnly} onNavigate={() => setMobileOpen(false)} onLogout={handleLogout} />
             </div>
           </div>

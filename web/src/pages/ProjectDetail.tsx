@@ -69,16 +69,16 @@ export function ProjectDetail() {
         <BackLink to={`${prefix}/projects`} label="Back to Projects" />
       </div>
 
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold text-slate-900">{project.name}</h1>
             <ProjectStatusBadge status={project.status} />
           </div>
           {project.description && <p className="mt-1 text-sm text-slate-500">{project.description}</p>}
           <ProjectInfoLine project={project} />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <NavLink
             to={`${prefix}/projects/${projectId}/report`}
             className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
@@ -131,25 +131,38 @@ export function ProjectDetail() {
   );
 }
 
+// startDate/targetCompletionDate are date-only columns, so they arrive as UTC
+// midnight. Formatting them in local time renders the previous day for anyone
+// west of UTC, so pin the display back to UTC.
+function formatDateOnly(value: string): string {
+  return new Date(value).toLocaleDateString(undefined, { timeZone: "UTC" });
+}
+
 function ProjectInfoLine({ project }: { project: Project }) {
-  const lines: string[] = [];
-  if (project.clientName) lines.push(project.clientName);
-  if (project.clientPhone) lines.push(project.clientPhone);
-  if (project.clientEmail) lines.push(project.clientEmail);
-  if (project.address) lines.push(project.address);
-  if (project.startDate) lines.push(`Start ${new Date(project.startDate).toLocaleDateString()}`);
-  if (project.targetCompletionDate) lines.push(`Target ${new Date(project.targetCompletionDate).toLocaleDateString()}`);
-  if (project.contractAmountCents != null) lines.push(`Contract ${formatCents(project.contractAmountCents)}`);
+  const hasClient = Boolean(project.clientName || project.clientPhone || project.clientEmail || project.address);
+  const hasTerms = Boolean(project.startDate || project.targetCompletionDate || project.contractAmountCents != null);
 
-  if (lines.length === 0) return null;
+  if (!hasClient && !hasTerms) return null;
 
-  // One item per line rather than a single "·"-joined row, so it reads
-  // cleanly on a narrow phone screen instead of wrapping mid-item.
+  // Two columns side by side on anything wider than a phone; stacked below
+  // that, so neither column wraps mid-item on a narrow screen.
   return (
-    <div className="mt-2 flex flex-col gap-0.5 text-xs text-slate-500">
-      {lines.map((line, i) => (
-        <span key={i}>{line}</span>
-      ))}
+    <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:gap-12">
+      {hasClient && (
+        <div className="flex flex-col gap-0.5">
+          {project.clientName && <span className="text-base font-bold text-slate-900">{project.clientName}</span>}
+          {project.clientPhone && <span className="text-sm font-bold text-slate-700">{project.clientPhone}</span>}
+          {project.clientEmail && <span className="text-xs text-slate-500">{project.clientEmail}</span>}
+          {project.address && <span className="text-xs text-slate-500">{project.address}</span>}
+        </div>
+      )}
+      {hasTerms && (
+        <div className="flex flex-col gap-0.5 text-xs text-slate-500">
+          {project.startDate && <span>Start {formatDateOnly(project.startDate)}</span>}
+          {project.targetCompletionDate && <span>Target {formatDateOnly(project.targetCompletionDate)}</span>}
+          {project.contractAmountCents != null && <span>Contract {formatCents(project.contractAmountCents)}</span>}
+        </div>
+      )}
     </div>
   );
 }

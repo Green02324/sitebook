@@ -55,3 +55,18 @@ export async function createUserByAdmin(email: string, name: string): Promise<{ 
   const user = await prisma.user.create({ data: { email, name, passwordHash, role: "USER" } });
   return { user, tempPassword };
 }
+
+// Stored passwords are bcrypt hashes, so an admin can never be shown a user's
+// existing password — there's nothing to read back. Resetting to a fresh
+// random one, surfaced exactly once at the point of reset, is the closest
+// equivalent. Every outstanding refresh token is revoked at the same time, so
+// sessions opened with the old password can't outlive it.
+export async function resetUserPassword(userId: string): Promise<string> {
+  const tempPassword = generateTempPassword();
+  const passwordHash = await bcrypt.hash(tempPassword, 10);
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { passwordHash } }),
+    prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } }),
+  ]);
+  return tempPassword;
+}
