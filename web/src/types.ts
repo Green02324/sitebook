@@ -22,6 +22,13 @@ export interface Project {
   name: string;
   description: string | null;
   status: ProjectStatus;
+  clientName: string | null;
+  clientPhone: string | null;
+  clientEmail: string | null;
+  address: string | null;
+  startDate: string | null;
+  targetCompletionDate: string | null;
+  contractAmountCents: number | null;
   createdAt: string;
   updatedAt: string;
   _count?: { transactions: number };
@@ -63,8 +70,14 @@ export interface DashboardResponse {
   year: number;
   totalIncomeCents: number;
   totalExpenseCents: number;
+  overheadCents: number;
   projects: DashboardProjectSummary[];
   availableYears: number[];
+}
+
+export interface DashboardBreakdown {
+  creditCents: number;
+  debits: { name: string; amountCents: number }[];
 }
 
 export interface ReportLine {
@@ -81,6 +94,7 @@ export interface ReportResponse {
   credits: ReportLine[];
   debits: ReportLine[];
   netCents: number;
+  profitPct: number | null;
 }
 
 export interface ComparisonRow {
@@ -92,4 +106,76 @@ export interface ComparisonRow {
   actualCreditCents: number;
   varianceDebitCents: number;
   varianceCreditCents: number;
+}
+
+export interface OverheadCategory {
+  id: string;
+  userId: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface OverheadExpense {
+  id: string;
+  userId: string;
+  categoryId: string | null;
+  category?: OverheadCategory | null;
+  date: string;
+  amountCents: number;
+  description: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AnnualSummaryProjectLine {
+  name: string;
+  status: ProjectStatus;
+  incomeCents: number;
+  expenseCents: number;
+  netCents: number;
+  profitPct: number | null;
+}
+
+export interface AnnualSummaryResponse {
+  year: number;
+  contractorName: string;
+  generatedAt: string;
+  projects: AnnualSummaryProjectLine[];
+  overheadCents: number;
+  grandNetCents: number;
+}
+
+export interface DetailedTxLine {
+  date: string;
+  type: TransactionType;
+  categoryName: string;
+  amountCents: number;
+  description: string | null;
+}
+
+export interface AnnualDetailedResponse {
+  year: number;
+  contractorName: string;
+  generatedAt: string;
+  projects: { name: string; transactions: DetailedTxLine[] }[];
+  overhead: DetailedTxLine[];
+}
+
+export interface LedgerLine {
+  date: string;
+  source: string;
+  categoryName: string;
+  amountCents: number;
+}
+
+export interface AnnualLedgerResponse {
+  year: number;
+  contractorName: string;
+  generatedAt: string;
+  credits: LedgerLine[];
+  debits: LedgerLine[];
+  totalCredits: number;
+  totalDebits: number;
+  netCents: number;
 }

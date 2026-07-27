@@ -5,6 +5,8 @@ import authRouter from "./routes/auth";
 import usersRouter from "./routes/users";
 import dashboardRouter from "./routes/dashboard";
 import projectsRouter from "./routes/projects";
+import overheadRouter from "./routes/overhead";
+import reportsRouter from "./routes/reports";
 import { seedDefaults } from "./seed";
 
 const REQUIRED_ENV_VARS = ["DATABASE_URL", "JWT_SECRET", "JWT_REFRESH_SECRET", "ADMIN_EMAIL", "OWNER_EMAIL"];
@@ -24,6 +26,8 @@ app.use("/api/auth", authRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/dashboard", dashboardRouter);
 app.use("/api/projects", projectsRouter);
+app.use("/api/overhead", overheadRouter);
+app.use("/api/reports", reportsRouter);
 
 const webDist = path.join(__dirname, "../../web/dist");
 app.use(express.static(webDist));

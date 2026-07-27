@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, fetchBlob } from "../api";
 import { useView, withViewParams } from "../context/ViewContext";
-import { formatCents } from "../lib/money";
+import { formatCents, formatPercent } from "../lib/money";
 import type { ReportResponse } from "../types";
 
 function basePath(readOnly: boolean, targetUserId: string): string {
@@ -127,10 +127,14 @@ export function ReportPage() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-white p-4 text-lg font-bold">
+      <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-4 text-lg font-bold">
         <div className="flex justify-between">
           <span>Net Profit</span>
           <span className={report.netCents >= 0 ? "text-emerald-700" : "text-rose-700"}>{formatCents(report.netCents)}</span>
+        </div>
+        <div className="flex justify-between text-base">
+          <span className="font-medium text-slate-600">Profit %</span>
+          <span className={report.netCents >= 0 ? "text-emerald-700" : "text-rose-700"}>{formatPercent(report.profitPct)}</span>
         </div>
       </div>
     </div>

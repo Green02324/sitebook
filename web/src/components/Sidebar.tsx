@@ -77,6 +77,12 @@ function NavContent({
           Dashboard
         </NavLink>
         <ProjectsNavList onNavigate={onNavigate} />
+        <NavLink to={`${prefix}/overhead`} className={linkClass} onClick={onNavigate}>
+          Overhead
+        </NavLink>
+        <NavLink to={`${prefix}/annual-report`} className={linkClass} onClick={onNavigate}>
+          Annual Report
+        </NavLink>
         {!readOnly && isAdmin && (
           <NavLink to="/admin" className={linkClass} onClick={onNavigate}>
             Admin

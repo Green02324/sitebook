@@ -13,3 +13,10 @@ export function assertPositiveCents(cents: number) {
     throw new Error("Amount must be a positive number");
   }
 }
+
+// Profit as a percentage of revenue (margin), not of cost (markup):
+// (Credits - Debits) / Credits. Null when there's no revenue to divide by.
+export function profitPercent(creditsCents: number, debitsCents: number): number | null {
+  if (creditsCents <= 0) return null;
+  return ((creditsCents - debitsCents) / creditsCents) * 100;
+}

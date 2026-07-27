@@ -1,14 +1,18 @@
 import { useState } from "react";
-import type { Category } from "../types";
 
-interface CategorySelectProps {
-  categories: Category[];
-  value: string | null;
-  onChange: (categoryId: string | null) => void;
-  onCreate: (name: string) => Promise<Category>;
+interface NamedCategory {
+  id: string;
+  name: string;
 }
 
-export function CategorySelect({ categories, value, onChange, onCreate }: CategorySelectProps) {
+interface CategorySelectProps<T extends NamedCategory> {
+  categories: T[];
+  value: string | null;
+  onChange: (categoryId: string | null) => void;
+  onCreate: (name: string) => Promise<T>;
+}
+
+export function CategorySelect<T extends NamedCategory>({ categories, value, onChange, onCreate }: CategorySelectProps<T>) {
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [saving, setSaving] = useState(false);

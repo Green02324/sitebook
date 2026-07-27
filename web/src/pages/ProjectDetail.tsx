@@ -4,6 +4,8 @@ import { api } from "../api";
 import { useView, withViewParams } from "../context/ViewContext";
 import { ProjectStatusBadge } from "../components/ProjectStatusBadge";
 import { Modal } from "../components/Modal";
+import { ProjectForm, type ProjectFormPayload } from "../components/ProjectForm";
+import { formatCents } from "../lib/money";
 import type { Category, Project } from "../types";
 
 function basePath(readOnly: boolean, targetUserId: string): string {
@@ -23,10 +25,17 @@ export function ProjectDetail() {
   const [project, setProject] = useState<Project | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [showSettings, setShowSettings] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
   const [loading, setLoading] = useState(true);
 
   function loadCategories() {
     api.get<Category[]>(withViewParams(`/projects/${projectId}/categories`, view)).then(setCategories);
+  }
+
+  async function handleEdit(payload: ProjectFormPayload) {
+    const updated = await api.put<Project>(`/projects/${projectId}`, payload);
+    setProject(updated);
+    setShowEdit(false);
   }
 
   useEffect(() => {
@@ -62,6 +71,7 @@ export function ProjectDetail() {
             <ProjectStatusBadge status={project.status} />
           </div>
           {project.description && <p className="mt-1 text-sm text-slate-500">{project.description}</p>}
+          <ProjectInfoLine project={project} />
         </div>
         <div className="flex gap-2">
           <NavLink
@@ -70,6 +80,14 @@ export function ProjectDetail() {
           >
             Report
           </NavLink>
+          {!view.readOnly && (
+            <button
+              onClick={() => setShowEdit(true)}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Edit
+            </button>
+          )}
           {!view.readOnly && (
             <button
               onClick={() => setShowSettings(true)}
@@ -98,8 +116,29 @@ export function ProjectDetail() {
       {showSettings && (
         <CategorySettingsModal project={project} categories={categories} onClose={() => setShowSettings(false)} onChanged={loadCategories} />
       )}
+
+      {showEdit && (
+        <Modal title="Edit Project" onClose={() => setShowEdit(false)} wide>
+          <ProjectForm initial={project} submitLabel="Save" onCancel={() => setShowEdit(false)} onSubmit={handleEdit} />
+        </Modal>
+      )}
     </div>
   );
+}
+
+function ProjectInfoLine({ project }: { project: Project }) {
+  const parts: string[] = [];
+  if (project.clientName) parts.push(project.clientName);
+  if (project.clientPhone) parts.push(project.clientPhone);
+  if (project.clientEmail) parts.push(project.clientEmail);
+  if (project.address) parts.push(project.address);
+  if (project.startDate) parts.push(`Start ${new Date(project.startDate).toLocaleDateString()}`);
+  if (project.targetCompletionDate) parts.push(`Target ${new Date(project.targetCompletionDate).toLocaleDateString()}`);
+  if (project.contractAmountCents != null) parts.push(`Contract ${formatCents(project.contractAmountCents)}`);
+
+  if (parts.length === 0) return null;
+
+  return <p className="mt-2 text-xs text-slate-500">{parts.join(" · ")}</p>;
 }
 
 function CategorySettingsModal({

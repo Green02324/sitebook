@@ -4,9 +4,23 @@ import { prisma } from "../lib/prisma";
 import { ah } from "../lib/asyncHandler";
 import { requireAuth, withEffectiveUser } from "../lib/auth";
 import { buildProjectReportPdf, type ReportData } from "../lib/pdf";
+import { profitPercent } from "../lib/money";
 import categoriesRouter from "./categories";
 import transactionsRouter from "./transactions";
 import type { Prisma, ProjectStatus } from "@prisma/client";
+
+interface ProjectFieldsInput {
+  name?: string;
+  description?: string;
+  status?: ProjectStatus;
+  clientName?: string | null;
+  clientPhone?: string | null;
+  clientEmail?: string | null;
+  address?: string | null;
+  startDate?: string | null;
+  targetCompletionDate?: string | null;
+  contractAmountCents?: number | null;
+}
 
 const router = Router();
 router.use(requireAuth, withEffectiveUser);
@@ -40,13 +54,25 @@ router.get(
 router.post(
   "/",
   ah(async (req, res) => {
-    const { name, description, status } = req.body as { name?: string; description?: string; status?: ProjectStatus };
-    if (!name) {
+    const body = req.body as ProjectFieldsInput;
+    if (!body.name) {
       res.status(400).json({ error: "Name is required" });
       return;
     }
     const project = await prisma.project.create({
-      data: { name, description, status: status ?? "PLANNING", userId: req.user!.id },
+      data: {
+        name: body.name,
+        description: body.description,
+        status: body.status ?? "PLANNING",
+        clientName: body.clientName,
+        clientPhone: body.clientPhone,
+        clientEmail: body.clientEmail,
+        address: body.address,
+        startDate: body.startDate ? new Date(body.startDate) : undefined,
+        targetCompletionDate: body.targetCompletionDate ? new Date(body.targetCompletionDate) : undefined,
+        contractAmountCents: body.contractAmountCents ?? undefined,
+        userId: req.user!.id,
+      },
     });
     res.status(201).json(project);
   }),
@@ -59,11 +85,18 @@ router.get("/:id", (req, res) => {
 router.put(
   "/:id",
   ah(async (req, res) => {
-    const { name, description, status } = req.body as { name?: string; description?: string; status?: ProjectStatus };
+    const body = req.body as ProjectFieldsInput;
     const data: Prisma.ProjectUpdateInput = {};
-    if (name !== undefined) data.name = name;
-    if (description !== undefined) data.description = description;
-    if (status !== undefined) data.status = status;
+    if (body.name !== undefined) data.name = body.name;
+    if (body.description !== undefined) data.description = body.description;
+    if (body.status !== undefined) data.status = body.status;
+    if (body.clientName !== undefined) data.clientName = body.clientName;
+    if (body.clientPhone !== undefined) data.clientPhone = body.clientPhone;
+    if (body.clientEmail !== undefined) data.clientEmail = body.clientEmail;
+    if (body.address !== undefined) data.address = body.address;
+    if (body.startDate !== undefined) data.startDate = body.startDate ? new Date(body.startDate) : null;
+    if (body.targetCompletionDate !== undefined) data.targetCompletionDate = body.targetCompletionDate ? new Date(body.targetCompletionDate) : null;
+    if (body.contractAmountCents !== undefined) data.contractAmountCents = body.contractAmountCents;
     const project = await prisma.project.update({ where: { id: req.project!.id }, data });
     res.json(project);
   }),
@@ -168,7 +201,9 @@ async function buildReportData(req: Request): Promise<ReportData> {
 
   const credits = Array.from(creditsByCategory.entries()).map(([categoryName, subtotalCents]) => ({ categoryName, subtotalCents }));
   const debits = Array.from(debitsByCategory.entries()).map(([categoryName, subtotalCents]) => ({ categoryName, subtotalCents }));
-  const netCents = credits.reduce((s, c) => s + c.subtotalCents, 0) - debits.reduce((s, d) => s + d.subtotalCents, 0);
+  const totalCreditCents = credits.reduce((s, c) => s + c.subtotalCents, 0);
+  const totalDebitCents = debits.reduce((s, d) => s + d.subtotalCents, 0);
+  const netCents = totalCreditCents - totalDebitCents;
 
   const owner = await prisma.user.findUnique({ where: { id: req.project!.userId } });
 
@@ -181,6 +216,7 @@ async function buildReportData(req: Request): Promise<ReportData> {
     credits,
     debits,
     netCents,
+    profitPct: profitPercent(totalCreditCents, totalDebitCents),
   };
 }
 

@@ -29,16 +29,18 @@ enum TransactionMode {
 }
 
 model User {
-  id            String         @id @default(cuid())
-  email         String         @unique
-  passwordHash  String
-  name          String
-  avatarUrl     String?
-  role          Role           @default(USER)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  projects      Project[]
-  refreshTokens RefreshToken[]
+  id                String             @id @default(cuid())
+  email             String             @unique
+  passwordHash      String
+  name              String
+  avatarUrl         String?
+  role              Role               @default(USER)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  projects          Project[]
+  refreshTokens     RefreshToken[]
+  overheadCategories OverheadCategory[]
+  overheadExpenses  OverheadExpense[]
 }
 
 // Refresh-token rotation: each row is one issued refresh token. On every
@@ -58,16 +60,23 @@ model RefreshToken {
 }
 
 model Project {
-  id           String        @id @default(cuid())
-  userId       String
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name         String
-  description  String?
-  status       ProjectStatus @default(PLANNING)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  categories   Category[]
-  transactions Transaction[]
+  id                   String        @id @default(cuid())
+  userId               String
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                 String
+  description          String?
+  status               ProjectStatus @default(PLANNING)
+  clientName           String?
+  clientPhone          String?
+  clientEmail          String?
+  address              String?
+  startDate            DateTime?     @db.Date
+  targetCompletionDate DateTime?     @db.Date
+  contractAmountCents  Int?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  categories           Category[]
+  transactions         Transaction[]
 
   @@index([userId, createdAt])
 }
@@ -99,5 +108,36 @@ model Transaction {
   updatedAt   DateTime        @updatedAt
 
   @@index([projectId, mode])
+  @@index([categoryId])
+}
+
+// Business-wide expenses not tied to any project (advertising, vehicle,
+// salary, insurance, etc.) — scoped directly by userId, same
+// reusable-category pattern as project Category.
+model OverheadCategory {
+  id        String            @id @default(cuid())
+  userId    String
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime          @default(now())
+  expenses  OverheadExpense[]
+
+  @@unique([userId, name])
+}
+
+model OverheadExpense {
+  id          String            @id @default(cuid())
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId  String?
+  category    OverheadCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  date        DateTime          @db.Date
+  amountCents Int
+  description String?
+  notes       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([userId, date])
   @@index([categoryId])
 }

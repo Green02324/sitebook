@@ -15,6 +15,8 @@ import { ComparisonTab } from "./pages/tabs/ComparisonTab";
 import { ReportPage } from "./pages/ReportPage";
 import { Profile } from "./pages/Profile";
 import { AdminUsers } from "./pages/AdminUsers";
+import { OverheadPage } from "./pages/OverheadPage";
+import { AnnualReportPage } from "./pages/AnnualReportPage";
 import { api } from "./api";
 import type { User } from "./types";
 
@@ -66,6 +68,8 @@ function App() {
               {projectTabRoutes}
             </Route>
             <Route path="/projects/:projectId/report" element={<ReportPage />} />
+            <Route path="/overhead" element={<OverheadPage />} />
+            <Route path="/annual-report" element={<AnnualReportPage />} />
             <Route path="/profile" element={<Profile />} />
 
             <Route
@@ -98,6 +102,8 @@ function App() {
               {projectTabRoutes}
             </Route>
             <Route path="projects/:projectId/report" element={<ReportPage />} />
+            <Route path="overhead" element={<OverheadPage />} />
+            <Route path="annual-report" element={<AnnualReportPage />} />
           </Route>
         </Routes>
       </BrowserRouter>
