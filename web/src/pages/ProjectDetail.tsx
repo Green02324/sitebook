@@ -5,6 +5,7 @@ import { useView, withViewParams } from "../context/ViewContext";
 import { ProjectStatusBadge } from "../components/ProjectStatusBadge";
 import { Modal } from "../components/Modal";
 import { ProjectForm, type ProjectFormPayload } from "../components/ProjectForm";
+import { BackLink } from "../components/BackLink";
 import { formatCents } from "../lib/money";
 import type { Category, Project } from "../types";
 
@@ -64,6 +65,10 @@ export function ProjectDetail() {
 
   return (
     <div className="flex flex-col gap-6">
+      <div>
+        <BackLink to={`${prefix}/projects`} label="Back to Projects" />
+      </div>
+
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-3">

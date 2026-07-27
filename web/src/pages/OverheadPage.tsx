@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../api";
 import { useView, withViewParams } from "../context/ViewContext";
 import { Modal } from "../components/Modal";
+import { BackLink } from "../components/BackLink";
 import { CategorySelect } from "../components/CategorySelect";
 import { formatCents, toCents, centsToInputValue } from "../lib/money";
 import type { OverheadCategory, OverheadExpense } from "../types";
@@ -221,6 +222,10 @@ export function OverheadPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <div>
+        <BackLink to={view.readOnly ? `/admin/users/${view.targetUserId}/dashboard` : "/dashboard"} />
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-slate-900">Overhead</h1>
         <div className="flex gap-2">

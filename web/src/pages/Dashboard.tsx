@@ -13,7 +13,6 @@ function basePath(readOnly: boolean, targetUserId: string): string {
 }
 
 const OVERHEAD_KEY = "__OVERHEAD__";
-const INCOME_COLOR = "#48484a";
 const OVERHEAD_COLOR = "#8e8e93";
 // Apple-system palette, rotated per project (income/overhead colors reserved above).
 const PROJECT_PALETTE = ["#0a84ff", "#af52de", "#ff9500", "#ff2d55", "#5856d6", "#ffcc00", "#5ac8fa", "#ff3b30", "#4cd964", "#00c7be", "#a2845e", "#30b0c7"];
@@ -64,7 +63,7 @@ export function Dashboard() {
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-6">
-        <DonutChart totalIncomeCents={data.totalIncomeCents} netCents={netCents} incomeColor={INCOME_COLOR} slices={slices} loadDetail={loadDetail} />
+        <DonutChart totalIncomeCents={data.totalIncomeCents} netCents={netCents} slices={slices} loadDetail={loadDetail} />
       </div>
 
       <div>

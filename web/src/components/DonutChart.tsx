@@ -15,7 +15,6 @@ export interface DonutDetail {
 interface DonutChartProps {
   totalIncomeCents: number;
   netCents: number;
-  incomeColor?: string;
   slices: DonutExpenseSlice[];
   loadDetail: (key: string) => Promise<DonutDetail>;
 }
@@ -29,24 +28,30 @@ const INNER_STROKE = 18;
 const INNER_RADIUS = 68;
 const INNER_CIRCUMFERENCE = 2 * Math.PI * INNER_RADIUS;
 
-const BACKGROUND_COLOR = "#e5e5ea";
-const DEFAULT_INCOME_COLOR = "#48484a";
+// The whole circle represents total credits (income). Colored wedges bite
+// into it for each debit source (projects + overhead); whatever's left
+// uncovered — this light Apple-gray background — IS the profit. There's no
+// dedicated "income" wedge to draw.
+const LEFTOVER_COLOR = "#c7c7cc";
 
 // Same rotating Apple-system palette used for sub-wedges in the expense
 // tracker — distinct from any single project's own outer-ring color.
 const SUB_PALETTE = ["#5856d6", "#ff2d55", "#ffcc00", "#5ac8fa", "#4cd964", "#ff9500", "#af52de", "#8e8e93", "#00c7be", "#ff6482", "#a2845e", "#30b0c7"];
 
-export function DonutChart({ totalIncomeCents, netCents, incomeColor = DEFAULT_INCOME_COLOR, slices, loadDetail }: DonutChartProps) {
+export function DonutChart({ totalIncomeCents, netCents, slices, loadDetail }: DonutChartProps) {
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [detail, setDetail] = useState<DonutDetail | null>(null);
   const [loading, setLoading] = useState(false);
 
   const visibleSlices = slices.filter((s) => s.amountCents > 0);
   const totalExpenseCents = visibleSlices.reduce((s, x) => s + x.amountCents, 0);
+  // Normally the denominator is total credits (the whole circle = income).
+  // If total debits exceed income (a loss), debit wedges would overrun the
+  // circle — so the denominator grows to fit them instead, leaving no gray
+  // "leftover" showing, which correctly reflects there being no profit.
   const denominator = Math.max(totalIncomeCents, totalExpenseCents, 1);
 
-  const incomeFraction = totalIncomeCents / denominator;
-  let cumulative = incomeFraction;
+  let cumulative = 0;
   const expenseSegments = visibleSlices.map((s) => {
     const fraction = s.amountCents / denominator;
     const seg = { ...s, dashArray: `${fraction * CIRCUMFERENCE} ${CIRCUMFERENCE}`, dashOffset: -cumulative * CIRCUMFERENCE };
@@ -93,18 +98,7 @@ export function DonutChart({ totalIncomeCents, netCents, incomeColor = DEFAULT_I
     <div className="flex flex-col items-center gap-5">
       <div className="relative" style={{ width: SIZE, height: SIZE }}>
         <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ transform: "rotate(-90deg)" }}>
-          <circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} fill="none" stroke={BACKGROUND_COLOR} strokeWidth={STROKE} />
-          <circle
-            cx={SIZE / 2}
-            cy={SIZE / 2}
-            r={RADIUS}
-            fill="none"
-            stroke={incomeColor}
-            strokeWidth={STROKE}
-            strokeDasharray={`${incomeFraction * CIRCUMFERENCE} ${CIRCUMFERENCE}`}
-            strokeDashoffset={0}
-            strokeLinecap="butt"
-          />
+          <circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} fill="none" stroke={LEFTOVER_COLOR} strokeWidth={STROKE} />
           {expenseSegments.map((seg) => (
             <circle
               key={seg.key}
@@ -177,7 +171,7 @@ export function DonutChart({ totalIncomeCents, netCents, incomeColor = DEFAULT_I
 
       <div className="flex flex-wrap justify-center gap-2.5">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ background: incomeColor }} />
+          <span className="h-2.5 w-2.5 rounded-full" style={{ background: LEFTOVER_COLOR }} />
           Total Income · {formatCents(totalIncomeCents)}
         </span>
         {visibleSlices.map((s) => (

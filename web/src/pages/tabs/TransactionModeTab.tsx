@@ -90,16 +90,13 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
   const { project, categories, reloadCategories, readOnly } = useOutletContext<ProjectDetailContext>();
   const view = useView();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [totals, setTotals] = useState({ debitCents: 0, creditCents: 0 });
   const [loading, setLoading] = useState(true);
-  const [typeFilter, setTypeFilter] = useState<TransactionType | "">("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [editing, setEditing] = useState<Transaction | "new" | null>(null);
 
   function load() {
     setLoading(true);
     const params = new URLSearchParams({ mode });
-    if (typeFilter) params.set("type", typeFilter);
     if (categoryFilter) params.set("categoryId", categoryFilter);
     api
       .get<Transaction[]>(withViewParams(`/projects/${project.id}/transactions?${params.toString()}`, view))
@@ -107,27 +104,15 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
       .finally(() => setLoading(false));
   }
 
-  // Always unfiltered, independent of the table's type/category filters, so
-  // the profit summary reflects the whole mode, not just what's shown below.
-  function loadTotals() {
-    api
-      .get<Transaction[]>(withViewParams(`/projects/${project.id}/transactions?mode=${mode}`, view))
-      .then((all) => {
-        let debitCents = 0;
-        let creditCents = 0;
-        for (const tx of all) {
-          if (tx.type === "CREDIT") creditCents += tx.amountCents;
-          else debitCents += tx.amountCents;
-        }
-        setTotals({ debitCents, creditCents });
-      })
-      .catch(() => {});
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(load, [project.id, mode, categoryFilter, view.targetUserId, view.readOnly]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(load, [project.id, mode, typeFilter, categoryFilter, view.targetUserId, view.readOnly]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(loadTotals, [project.id, mode, view.targetUserId, view.readOnly]);
+  const debitTransactions = transactions.filter((t) => t.type === "DEBIT");
+  const creditTransactions = transactions.filter((t) => t.type === "CREDIT");
+  const totals = {
+    debitCents: debitTransactions.reduce((s, t) => s + t.amountCents, 0),
+    creditCents: creditTransactions.reduce((s, t) => s + t.amountCents, 0),
+  };
 
   async function handleCreateCategory(name: string): Promise<Category> {
     const category = await api.post<Category>(`/projects/${project.id}/categories`, { name });
@@ -143,14 +128,12 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
     }
     setEditing(null);
     load();
-    loadTotals();
   }
 
   async function handleDelete(tx: Transaction) {
     if (!confirm("Delete this transaction?")) return;
     await api.delete(`/projects/${project.id}/transactions/${tx.id}`);
     load();
-    loadTotals();
   }
 
   return (
@@ -162,25 +145,14 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-2">
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value as TransactionType | "")}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-          >
-            <option value="">All types</option>
-            <option value="DEBIT">Debit</option>
-            <option value="CREDIT">Credit</option>
-          </select>
-          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">
-            <option value="">All categories</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">
+          <option value="">All categories</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
         {!readOnly && (
           <button onClick={() => setEditing("new")} className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-semibold text-white">
             Add {mode === "ESTIMATE" ? "Estimate" : "Entry"}
@@ -191,7 +163,25 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
       {loading ? (
         <div className="text-sm text-slate-500">Loading…</div>
       ) : (
-        <TransactionTable transactions={transactions} readOnly={readOnly} onEdit={setEditing} onDelete={handleDelete} />
+        <>
+          <div className="flex flex-col gap-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Debits</h3>
+            <TransactionTable transactions={debitTransactions} readOnly={readOnly} onEdit={setEditing} onDelete={handleDelete} hideType emptyLabel="No debits yet." />
+            <div className="flex justify-between px-1 text-sm font-semibold text-rose-700">
+              <span>Total Debits</span>
+              <span>{formatCents(totals.debitCents)}</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Credits</h3>
+            <TransactionTable transactions={creditTransactions} readOnly={readOnly} onEdit={setEditing} onDelete={handleDelete} hideType emptyLabel="No credits yet." />
+            <div className="flex justify-between px-1 text-sm font-semibold text-emerald-700">
+              <span>Total Credits</span>
+              <span>{formatCents(totals.creditCents)}</span>
+            </div>
+          </div>
+        </>
       )}
 
       {editing && (

@@ -8,6 +8,7 @@ import type { ComparisonRow } from "../../types";
 
 function ComparisonBar({ label, debitCents, creditCents, maxCents }: { label: string; debitCents: number; creditCents: number; maxCents: number }) {
   const total = debitCents + creditCents;
+  const profit = creditCents - debitCents;
   const barWidthPct = maxCents > 0 ? (total / maxCents) * 100 : 0;
   const debitPct = total > 0 ? (debitCents / total) * 100 : 0;
   const creditPct = total > 0 ? (creditCents / total) * 100 : 0;
@@ -16,7 +17,7 @@ function ComparisonBar({ label, debitCents, creditCents, maxCents }: { label: st
     <div>
       <div className="mb-1 flex items-center justify-between text-sm">
         <span className="font-medium text-slate-700">{label}</span>
-        <span className="text-slate-500">{formatCents(total)}</span>
+        <span className={`font-medium ${profit >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{formatCents(profit)} profit</span>
       </div>
       <div className="h-5 w-full overflow-hidden rounded-full bg-slate-100">
         <div className="flex h-full rounded-full" style={{ width: `${barWidthPct}%` }}>

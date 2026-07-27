@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
+import { BackLink } from "../components/BackLink";
 import type { User } from "../types";
 
 export function Profile() {
@@ -59,6 +60,8 @@ export function Profile() {
 
   return (
     <div className="flex max-w-xl flex-col gap-8">
+      <BackLink to="/dashboard" />
+
       <h1 className="text-2xl font-bold text-slate-900">Profile</h1>
 
       <div className="flex items-center gap-4">

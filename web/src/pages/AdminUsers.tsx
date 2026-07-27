@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { BackLink } from "../components/BackLink";
 import type { UserWithProjectCount } from "../types";
 
 export function AdminUsers() {
@@ -43,6 +44,8 @@ export function AdminUsers() {
 
   return (
     <div className="flex flex-col gap-6">
+      <BackLink to="/dashboard" />
+
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-900">Admin — Users</h1>
         <button onClick={() => setShowCreate((s) => !s)} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">

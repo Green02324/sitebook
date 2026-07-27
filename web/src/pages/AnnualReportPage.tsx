@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, fetchBlob } from "../api";
 import { useView, withViewParams } from "../context/ViewContext";
+import { BackLink } from "../components/BackLink";
 import { formatCents, formatPercent } from "../lib/money";
 import type { AnnualDetailedResponse, AnnualLedgerResponse, AnnualSummaryResponse, DetailedTxLine, LedgerLine } from "../types";
 
@@ -229,6 +230,10 @@ export function AnnualReportPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <div>
+        <BackLink to={view.readOnly ? `/admin/users/${view.targetUserId}/dashboard` : "/dashboard"} />
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-slate-900">Annual Report</h1>
         <div className="flex items-center gap-2">
