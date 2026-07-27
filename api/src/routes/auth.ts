@@ -31,14 +31,17 @@ router.post(
     const accessToken = signAccessToken(user);
     const refreshToken = await issueRefreshToken(user.id);
     res.cookie(REFRESH_COOKIE, refreshToken, REFRESH_COOKIE_OPTS);
-    res.json({ accessToken, user: toSafeUser(user) });
+    // refreshToken is included in the body (in addition to the cookie) for
+    // clients with no cookie jar across restarts, e.g. the mobile app, which
+    // stores it itself (expo-secure-store) and resends it explicitly.
+    res.json({ accessToken, refreshToken, user: toSafeUser(user) });
   }),
 );
 
 router.post(
   "/refresh",
   ah(async (req, res) => {
-    const token = req.cookies?.[REFRESH_COOKIE];
+    const token = (req.body as { refreshToken?: string })?.refreshToken ?? req.cookies?.[REFRESH_COOKIE];
     if (!token) {
       res.status(401).json({ error: "Not authenticated" });
       return;
@@ -46,7 +49,7 @@ router.post(
     try {
       const { accessToken, refreshToken, user } = await rotateRefreshToken(token);
       res.cookie(REFRESH_COOKIE, refreshToken, REFRESH_COOKIE_OPTS);
-      res.json({ accessToken, user });
+      res.json({ accessToken, refreshToken, user });
     } catch (err) {
       if (err instanceof AuthError) {
         res.clearCookie(REFRESH_COOKIE, { path: "/api/auth" });
@@ -61,7 +64,7 @@ router.post(
 router.post(
   "/logout",
   ah(async (req, res) => {
-    const token = req.cookies?.[REFRESH_COOKIE];
+    const token = (req.body as { refreshToken?: string })?.refreshToken ?? req.cookies?.[REFRESH_COOKIE];
     await revokeRefreshToken(token);
     res.clearCookie(REFRESH_COOKIE, { path: "/api/auth" });
     res.json({ ok: true });
