@@ -127,18 +127,26 @@ export function ProjectDetail() {
 }
 
 function ProjectInfoLine({ project }: { project: Project }) {
-  const parts: string[] = [];
-  if (project.clientName) parts.push(project.clientName);
-  if (project.clientPhone) parts.push(project.clientPhone);
-  if (project.clientEmail) parts.push(project.clientEmail);
-  if (project.address) parts.push(project.address);
-  if (project.startDate) parts.push(`Start ${new Date(project.startDate).toLocaleDateString()}`);
-  if (project.targetCompletionDate) parts.push(`Target ${new Date(project.targetCompletionDate).toLocaleDateString()}`);
-  if (project.contractAmountCents != null) parts.push(`Contract ${formatCents(project.contractAmountCents)}`);
+  const lines: string[] = [];
+  if (project.clientName) lines.push(project.clientName);
+  if (project.clientPhone) lines.push(project.clientPhone);
+  if (project.clientEmail) lines.push(project.clientEmail);
+  if (project.address) lines.push(project.address);
+  if (project.startDate) lines.push(`Start ${new Date(project.startDate).toLocaleDateString()}`);
+  if (project.targetCompletionDate) lines.push(`Target ${new Date(project.targetCompletionDate).toLocaleDateString()}`);
+  if (project.contractAmountCents != null) lines.push(`Contract ${formatCents(project.contractAmountCents)}`);
 
-  if (parts.length === 0) return null;
+  if (lines.length === 0) return null;
 
-  return <p className="mt-2 text-xs text-slate-500">{parts.join(" · ")}</p>;
+  // One item per line rather than a single "·"-joined row, so it reads
+  // cleanly on a narrow phone screen instead of wrapping mid-item.
+  return (
+    <div className="mt-2 flex flex-col gap-0.5 text-xs text-slate-500">
+      {lines.map((line, i) => (
+        <span key={i}>{line}</span>
+      ))}
+    </div>
+  );
 }
 
 function CategorySettingsModal({

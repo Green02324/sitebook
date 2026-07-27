@@ -13,7 +13,7 @@ function basePath(readOnly: boolean, targetUserId: string): string {
 }
 
 const OVERHEAD_KEY = "__OVERHEAD__";
-const INCOME_COLOR = "#34c759";
+const INCOME_COLOR = "#48484a";
 const OVERHEAD_COLOR = "#8e8e93";
 // Apple-system palette, rotated per project (income/overhead colors reserved above).
 const PROJECT_PALETTE = ["#0a84ff", "#af52de", "#ff9500", "#ff2d55", "#5856d6", "#ffcc00", "#5ac8fa", "#ff3b30", "#4cd964", "#00c7be", "#a2845e", "#30b0c7"];

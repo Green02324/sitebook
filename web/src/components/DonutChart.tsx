@@ -30,7 +30,7 @@ const INNER_RADIUS = 68;
 const INNER_CIRCUMFERENCE = 2 * Math.PI * INNER_RADIUS;
 
 const BACKGROUND_COLOR = "#e5e5ea";
-const DEFAULT_INCOME_COLOR = "#34c759";
+const DEFAULT_INCOME_COLOR = "#48484a";
 
 // Same rotating Apple-system palette used for sub-wedges in the expense
 // tracker — distinct from any single project's own outer-ring color.
