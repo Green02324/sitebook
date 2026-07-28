@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { api } from "../api";
+import { api, refreshSession } from "../api";
 import { setAccessToken } from "../lib/tokenStore";
 import type { User } from "../types";
 
@@ -22,16 +22,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Silent login: the refresh cookie (if any) lets a page reload restore
-    // the session without the user re-entering credentials.
-    fetch("/api/auth/refresh", { method: "POST", credentials: "include" })
-      .then(async (res) => {
-        if (!res.ok) return;
-        const body: LoginResponse = await res.json();
-        setAccessToken(body.accessToken);
-        setUser(body.user);
+    // Silent login: the refresh cookie (if any) lets a page reload restore the
+    // session without re-entering credentials. This goes through the shared
+    // single-flight helper rather than its own fetch — StrictMode runs this
+    // effect twice in development, and two overlapping refreshes get the second
+    // one rejected as token reuse, which clears the cookie and logs the user
+    // straight back out.
+    refreshSession()
+      .then((body) => {
+        if (body) setUser(body.user);
       })
-      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 

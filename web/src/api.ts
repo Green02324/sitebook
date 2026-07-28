@@ -1,28 +1,44 @@
 import { getAccessToken, setAccessToken } from "./lib/tokenStore";
+import type { User } from "./types";
 
-let refreshPromise: Promise<boolean> | null = null;
+export interface RefreshResult {
+  accessToken: string;
+  user: User;
+}
 
-async function doRefresh(): Promise<boolean> {
+let refreshPromise: Promise<RefreshResult | null> | null = null;
+
+// Single-flight, and the only place the app is allowed to call /auth/refresh.
+// Refresh tokens rotate: the server revokes the presented token and treats a
+// second use of it as theft, clearing the cookie outright. So two overlapping
+// refreshes don't just race — the loser destroys the session the winner just
+// established. Everything funnels through this one in-flight promise so that
+// can't happen to us.
+export function refreshSession(): Promise<RefreshResult | null> {
   if (!refreshPromise) {
     refreshPromise = fetch("/api/auth/refresh", { method: "POST", credentials: "include" })
       .then(async (res) => {
         if (!res.ok) {
           setAccessToken(null);
-          return false;
+          return null;
         }
-        const body = await res.json();
+        const body = (await res.json()) as RefreshResult;
         setAccessToken(body.accessToken);
-        return true;
+        return body;
       })
       .catch(() => {
         setAccessToken(null);
-        return false;
+        return null;
       })
       .finally(() => {
         refreshPromise = null;
       });
   }
   return refreshPromise;
+}
+
+async function doRefresh(): Promise<boolean> {
+  return (await refreshSession()) !== null;
 }
 
 function authHeaders(): Record<string, string> {
