@@ -195,7 +195,7 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
         </select>
         {!readOnly && (
           <button onClick={() => setEditing("new")} className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-semibold text-white">
-            Add {mode === "ESTIMATE" ? "Estimate" : "Entry"}
+            Add {mode === "ESTIMATE" ? "Line Item" : "Entry"}
           </button>
         )}
       </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useParams } from "react-router-dom";
+import { NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useView, withViewParams } from "../context/ViewContext";
 import { ProjectStatusBadge } from "../components/ProjectStatusBadge";
@@ -7,6 +7,7 @@ import { Modal } from "../components/Modal";
 import { ProjectForm, type ProjectFormPayload } from "../components/ProjectForm";
 import { BackLink } from "../components/BackLink";
 import { formatCents } from "../lib/money";
+import { mapsUrl } from "../lib/maps";
 import type { Category, Project } from "../types";
 
 function basePath(readOnly: boolean, targetUserId: string): string {
@@ -23,10 +24,12 @@ export interface ProjectDetailContext {
 export function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
   const view = useView();
+  const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
   const [loading, setLoading] = useState(true);
 
   function loadCategories() {
@@ -101,6 +104,14 @@ export function ProjectDetail() {
               Categories
             </button>
           )}
+          {!view.readOnly && (
+            <button
+              onClick={() => setShowDelete(true)}
+              className="rounded-md border border-rose-300 px-3 py-1.5 text-sm font-medium text-rose-700 hover:bg-rose-50"
+            >
+              Delete
+            </button>
+          )}
         </div>
       </div>
 
@@ -127,6 +138,8 @@ export function ProjectDetail() {
           <ProjectForm initial={project} submitLabel="Save" onCancel={() => setShowEdit(false)} onSubmit={handleEdit} />
         </Modal>
       )}
+
+      {showDelete && <DeleteProjectModal project={project} onClose={() => setShowDelete(false)} onDeleted={() => navigate(`${prefix}/projects`)} />}
     </div>
   );
 }
@@ -155,7 +168,16 @@ function ProjectInfoLine({ project }: { project: Project }) {
           {project.clientName && <span className="text-base font-bold text-slate-900">{project.clientName}</span>}
           {project.clientPhone && <span className="text-sm font-bold text-slate-700">{project.clientPhone}</span>}
           {project.clientEmail && <span className="text-xs text-slate-500">{project.clientEmail}</span>}
-          {project.address && <span className="text-xs text-slate-500">{project.address}</span>}
+          {project.address && (
+            <a
+              href={mapsUrl(project.address)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-indigo-600 underline decoration-slate-300 underline-offset-2 hover:decoration-indigo-600"
+            >
+              {project.address}
+            </a>
+          )}
         </div>
       )}
       {hasTerms && (
@@ -166,6 +188,53 @@ function ProjectInfoLine({ project }: { project: Project }) {
         </div>
       )}
     </div>
+  );
+}
+
+// Deleting a project cascades to every transaction and category recorded
+// against it, so the dialog names what goes with it rather than asking a bare
+// "are you sure?".
+function DeleteProjectModal({ project, onClose, onDeleted }: { project: Project; onClose: () => void; onDeleted: () => void }) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    setError(null);
+    setDeleting(true);
+    try {
+      await api.delete(`/projects/${project.id}`);
+      onDeleted();
+    } catch (err) {
+      setError((err as Error).message);
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <Modal title="Delete this project?" onClose={onClose}>
+      <div className="flex flex-col gap-3">
+        <p className="text-sm text-slate-700">
+          <strong className="font-semibold text-slate-900">{project.name}</strong> will be permanently deleted.
+        </p>
+        <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+          Every estimate and actual entry on this job goes with it, along with its categories. This can&rsquo;t be undone.
+        </div>
+        {error && <div className="text-sm text-rose-600">{error}</div>}
+        <div className="mt-1 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-md border border-slate-300 px-4 py-1.5 text-sm font-medium text-slate-700">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting}
+            className="rounded-md bg-rose-600 px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {deleting ? "Deleting…" : "Delete project"}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

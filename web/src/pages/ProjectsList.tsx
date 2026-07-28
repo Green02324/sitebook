@@ -4,10 +4,11 @@ import { api } from "../api";
 import { useView, withViewParams } from "../context/ViewContext";
 import { Modal } from "../components/Modal";
 import { ProjectForm, type ProjectFormPayload } from "../components/ProjectForm";
-import { ProjectStatusBadge } from "../components/ProjectStatusBadge";
+import { ProjectStatusBadge, ProjectStatusSelect } from "../components/ProjectStatusBadge";
 import { BackLink } from "../components/BackLink";
 import { SORT_OPTIONS, sortProjects, type SortKey } from "../lib/sortProjects";
-import type { Project } from "../types";
+import { mapsUrl } from "../lib/maps";
+import type { Project, ProjectStatus } from "../types";
 
 function basePath(readOnly: boolean, targetUserId: string): string {
   return readOnly ? `/admin/users/${targetUserId}` : "";
@@ -20,6 +21,7 @@ export function ProjectsList() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [savingStatusId, setSavingStatusId] = useState<string | null>(null);
 
   const sortedProjects = useMemo(() => sortProjects(projects, sortKey), [projects, sortKey]);
 
@@ -45,6 +47,21 @@ export function ProjectsList() {
     await api.put(`/projects/${editingProject.id}`, payload);
     setEditingProject(null);
     load();
+  }
+
+  // Optimistic: the badge switches immediately, and only rolls back if the
+  // save actually fails — changing stage shouldn't feel like a page action.
+  async function handleStatusChange(project: Project, status: ProjectStatus) {
+    const previous = project.status;
+    setProjects((current) => current.map((p) => (p.id === project.id ? { ...p, status } : p)));
+    setSavingStatusId(project.id);
+    try {
+      await api.put(`/projects/${project.id}`, { status });
+    } catch {
+      setProjects((current) => current.map((p) => (p.id === project.id ? { ...p, status: previous } : p)));
+    } finally {
+      setSavingStatusId(null);
+    }
   }
 
   const prefix = basePath(view.readOnly, view.targetUserId);
@@ -94,7 +111,11 @@ export function ProjectsList() {
               <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold text-slate-900">{p.name}</span>
                 <div className="flex items-center gap-2">
-                  <ProjectStatusBadge status={p.status} />
+                  {view.readOnly ? (
+                    <ProjectStatusBadge status={p.status} />
+                  ) : (
+                    <ProjectStatusSelect status={p.status} disabled={savingStatusId === p.id} onChange={(s) => handleStatusChange(p, s)} />
+                  )}
                   {!view.readOnly && (
                     <button
                       onClick={(e) => {
@@ -111,7 +132,21 @@ export function ProjectsList() {
               </div>
               {p.description && <p className="line-clamp-2 text-sm text-slate-500">{p.description}</p>}
               {p.clientName && <span className="text-xs text-slate-500">Client: {p.clientName}</span>}
-              {p.address && <span className="text-xs text-slate-500">{p.address}</span>}
+              {p.address && (
+                // The whole tile is already a Link, and nesting an anchor
+                // inside one is invalid — so this opens the map itself and
+                // stops the click from also navigating into the project.
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    window.open(mapsUrl(p.address!), "_blank", "noopener,noreferrer");
+                  }}
+                  className="self-start text-left text-xs text-indigo-600 underline decoration-slate-300 underline-offset-2 hover:decoration-indigo-600"
+                >
+                  {p.address}
+                </button>
+              )}
               <span className="text-xs text-slate-400">{p._count?.transactions ?? 0} transactions</span>
             </Link>
           ))}
