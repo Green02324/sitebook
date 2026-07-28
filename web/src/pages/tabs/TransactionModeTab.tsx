@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { api } from "../../api";
 import { useView, withViewParams } from "../../context/ViewContext";
-import { TransactionTable } from "../../components/TransactionTable";
+import { TransactionTable, type InlinePatch } from "../../components/TransactionTable";
 import { TransactionFormModal, type TransactionFormPayload } from "../../components/TransactionFormModal";
 import { formatCents, formatPercent, profitPercent, centsToInputValue } from "../../lib/money";
 import type { ProjectDetailContext } from "../ProjectDetail";
@@ -189,6 +189,28 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
     load();
   }
 
+  // Click-to-edit on a cell. Optimistic so the table doesn't flicker or lose
+  // scroll position on every keystroke-sized change; the row reverts and the
+  // error surfaces if the save is rejected.
+  async function handleInlineSave(tx: Transaction, patch: InlinePatch) {
+    const previous = transactions;
+    const applied: Partial<Transaction> = { ...patch };
+    // categoryId drives the save, but the cell renders category.name — so the
+    // joined object has to move with it or the change looks like it was lost.
+    if (patch.categoryId !== undefined) {
+      applied.category = categories.find((c) => c.id === patch.categoryId) ?? null;
+    }
+    setTransactions((current) => current.map((t) => (t.id === tx.id ? { ...t, ...applied } : t)));
+    try {
+      await api.put(`/projects/${project.id}/transactions/${tx.id}`, { ...patch, mode });
+    } catch (err) {
+      setTransactions(previous);
+      throw err;
+    }
+    // A phase typed straight into the row should join the picker's list.
+    if (patch.phase !== undefined) loadPhases();
+  }
+
   // Swaps with the neighbour inside its own debit/credit group, then persists
   // the whole list's order. Optimistic — the row moves on click and only snaps
   // back if the save fails.
@@ -248,6 +270,9 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
               onDelete={handleDelete}
               onMove={mode === "ESTIMATE" ? handleMove : undefined}
               showPhase={mode === "ESTIMATE"}
+              onInlineSave={mode === "ESTIMATE" ? handleInlineSave : undefined}
+              categories={categories}
+              phases={phases}
               hideType
               emptyLabel="No debits yet."
             />
@@ -266,6 +291,9 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
               onDelete={handleDelete}
               onMove={mode === "ESTIMATE" ? handleMove : undefined}
               showPhase={mode === "ESTIMATE"}
+              onInlineSave={mode === "ESTIMATE" ? handleInlineSave : undefined}
+              categories={categories}
+              phases={phases}
               hideType
               emptyLabel="No credits yet."
             />

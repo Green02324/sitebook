@@ -38,7 +38,9 @@ function titleCase(value: string): string {
 export interface EstimateLine {
   phase: string | null;
   categoryName: string;
-  notes: string | null;
+  // The line item's own description, sub-tasks included. Never the private
+  // notes field — that one stays out of anything printed.
+  description: string | null;
   amountCents: number;
 }
 
@@ -357,10 +359,10 @@ export async function buildEstimatePdf(data: EstimateData): Promise<Uint8Array> 
     [
       { label: "Phase", width: 110 },
       { label: "Category", width: 120 },
-      { label: "Notes", width: 175 },
+      { label: "Description", width: 175 },
       { label: "Amount", width: 90, align: "right" },
     ],
-    data.debits.map((l) => [l.phase ?? "—", l.categoryName, l.notes ?? "", formatCents(l.amountCents)]),
+    data.debits.map((l) => [l.phase ?? "—", l.categoryName, l.description ?? "", formatCents(l.amountCents)]),
   );
   b.gap(10);
   b.row("Total Estimated Cost", formatCents(data.totalDebitCents), { bold: true });
@@ -374,10 +376,10 @@ export async function buildEstimatePdf(data: EstimateData): Promise<Uint8Array> 
       [
         { label: "Phase", width: 110 },
         { label: "Category", width: 120 },
-        { label: "Notes", width: 175 },
+        { label: "Description", width: 175 },
         { label: "Amount", width: 90, align: "right" },
       ],
-      data.credits.map((l) => [l.phase ?? "—", l.categoryName, l.notes ?? "", formatCents(l.amountCents)]),
+      data.credits.map((l) => [l.phase ?? "—", l.categoryName, l.description ?? "", formatCents(l.amountCents)]),
     );
     b.gap(10);
     b.row("Total Quoted", formatCents(data.totalCreditCents), { bold: true });

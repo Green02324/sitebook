@@ -142,7 +142,7 @@ router.get(
     const toLine = (t: (typeof transactions)[number]) => ({
       phase: t.phase,
       categoryName: t.category?.name ?? "Uncategorized",
-      notes: t.notes,
+      description: t.description,
       amountCents: t.amountCents,
     });
     const debits = transactions.filter((t) => t.type === "DEBIT").map(toLine);

@@ -154,7 +154,7 @@ export function ProjectDetail() {
 
       <div className="flex gap-6 border-b border-slate-200">
         <NavLink to="estimate" className={tabClass}>
-          Estimate
+          Estimator
         </NavLink>
         <NavLink to="actuals" className={tabClass}>
           Actuals

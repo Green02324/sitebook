@@ -11,6 +11,9 @@ export interface TransactionFormPayload {
   phase: string | null;
   amountCents: number;
   categoryId: string | null;
+  // Shown on the line item itself, sub-tasks included.
+  description: string | null;
+  // Working history, only ever visible in this form.
   notes: string | null;
 }
 
@@ -31,6 +34,7 @@ export function TransactionFormModal({ mode, categories, phases, initial, onClos
   const [phase, setPhase] = useState<string | null>(initial?.phase ?? null);
   const [amount, setAmount] = useState(initial ? centsToInputValue(initial.amountCents) : "");
   const [categoryId, setCategoryId] = useState<string | null>(initial?.categoryId ?? null);
+  const [description, setDescription] = useState(initial?.description ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -57,6 +61,7 @@ export function TransactionFormModal({ mode, categories, phases, initial, onClos
         phase: isEstimate ? phase : null,
         amountCents,
         categoryId,
+        description: description || null,
         notes: notes || null,
       });
       onClose();
@@ -130,6 +135,20 @@ export function TransactionFormModal({ mode, categories, phases, initial, onClos
         </label>
 
         <label className="text-sm font-medium text-slate-700">
+          Description
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={4}
+            placeholder={"Frame second floor\n- Set walls\n- Sheathe and strap"}
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+          />
+          <span className="mt-1 block text-xs font-normal text-slate-500">
+            First line is the item. Put each sub-task on its own line — starting with <code>-</code> or <code>*</code> is optional.
+          </span>
+        </label>
+
+        <label className="text-sm font-medium text-slate-700">
           Notes
           <textarea
             value={notes ?? ""}
@@ -137,6 +156,9 @@ export function TransactionFormModal({ mode, categories, phases, initial, onClos
             rows={3}
             className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
           />
+          <span className="mt-1 block text-xs font-normal text-slate-500">
+            Working history — never shown on the line item or in printouts, only here.
+          </span>
         </label>
 
         {error && <div className="text-sm text-rose-600">{error}</div>}
