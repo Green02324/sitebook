@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
-import { api } from "../api";
+import { NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
+import { api, fetchBlob } from "../api";
 import { useView, withViewParams } from "../context/ViewContext";
 import { ProjectStatusBadge } from "../components/ProjectStatusBadge";
 import { Modal } from "../components/Modal";
@@ -25,11 +25,21 @@ export function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
   const view = useView();
   const navigate = useNavigate();
+  const location = useLocation();
   const [project, setProject] = useState<Project | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const [printing, setPrinting] = useState(false);
+
+  // Which child tab is showing, read from the URL rather than tracked in
+  // state so a direct link or a back/forward step stays in sync.
+  const activeTab: "estimate" | "actuals" | "comparison" = location.pathname.endsWith("/actuals")
+    ? "actuals"
+    : location.pathname.endsWith("/comparison")
+      ? "comparison"
+      : "estimate";
   const [loading, setLoading] = useState(true);
 
   function loadCategories() {
@@ -40,6 +50,23 @@ export function ProjectDetail() {
     const updated = await api.put<Project>(`/projects/${projectId}`, payload);
     setProject(updated);
     setShowEdit(false);
+  }
+
+  // The header button follows whichever tab is open: the actuals report is a
+  // page of its own, while estimate and comparison print straight to PDF.
+  async function handlePrint() {
+    // Open the tab synchronously, in direct response to the click, so the
+    // browser doesn't treat it as a popup once the async fetch resolves.
+    const pdfWindow = window.open("", "_blank");
+    setPrinting(true);
+    try {
+      const blob = await fetchBlob(withViewParams(`/projects/${projectId}/${activeTab}/pdf`, view));
+      const url = URL.createObjectURL(blob);
+      if (pdfWindow) pdfWindow.location.href = url;
+      else window.location.href = url;
+    } finally {
+      setPrinting(false);
+    }
   }
 
   useEffect(() => {
@@ -82,12 +109,22 @@ export function ProjectDetail() {
           <ProjectInfoLine project={project} />
         </div>
         <div className="flex flex-wrap gap-2">
-          <NavLink
-            to={`${prefix}/projects/${projectId}/report`}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Report
-          </NavLink>
+          {activeTab === "actuals" ? (
+            <NavLink
+              to={`${prefix}/projects/${projectId}/report`}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Report
+            </NavLink>
+          ) : (
+            <button
+              onClick={handlePrint}
+              disabled={printing}
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              {printing ? "Preparing…" : activeTab === "comparison" ? "Print Comparison" : "Print Estimate"}
+            </button>
+          )}
           {!view.readOnly && (
             <button
               onClick={() => setShowEdit(true)}

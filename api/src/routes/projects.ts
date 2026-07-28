@@ -3,7 +3,7 @@ import type { Request } from "express";
 import { prisma } from "../lib/prisma";
 import { ah } from "../lib/asyncHandler";
 import { requireAuth, withEffectiveUser } from "../lib/auth";
-import { buildProjectReportPdf, type ReportData } from "../lib/pdf";
+import { buildProjectReportPdf, buildEstimatePdf, buildComparisonPdf, type ReportData } from "../lib/pdf";
 import { profitPercent } from "../lib/money";
 import categoriesRouter from "./categories";
 import transactionsRouter from "./transactions";
@@ -121,11 +121,73 @@ router.get(
 router.get(
   "/:id/report/pdf",
   ah(async (req, res) => {
-    const report = await buildReportData(req);
+    const report = await buildReportData(req, req.query.detailed === "true");
     const pdfBytes = await buildProjectReportPdf(report);
     const safeName = req.project!.name.replace(/[^a-z0-9-_ ]/gi, "");
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${safeName}-report.pdf"`);
+    res.send(Buffer.from(pdfBytes));
+  }),
+);
+
+router.get(
+  "/:id/estimate/pdf",
+  ah(async (req, res) => {
+    const transactions = await prisma.transaction.findMany({
+      where: { projectId: req.project!.id, mode: "ESTIMATE" },
+      include: { category: true },
+      orderBy: [{ sortOrder: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
+    });
+
+    const toLine = (t: (typeof transactions)[number]) => ({
+      phase: t.phase,
+      categoryName: t.category?.name ?? "Uncategorized",
+      notes: t.notes,
+      amountCents: t.amountCents,
+    });
+    const debits = transactions.filter((t) => t.type === "DEBIT").map(toLine);
+    const credits = transactions.filter((t) => t.type === "CREDIT").map(toLine);
+    const owner = await prisma.user.findUnique({ where: { id: req.project!.userId } });
+
+    const pdfBytes = await buildEstimatePdf({
+      projectName: req.project!.name,
+      contractorName: owner?.name ?? "Unknown",
+      clientName: req.project!.clientName,
+      address: req.project!.address,
+      generatedAt: new Date().toISOString().slice(0, 10),
+      debits,
+      credits,
+      totalDebitCents: debits.reduce((s, l) => s + l.amountCents, 0),
+      totalCreditCents: credits.reduce((s, l) => s + l.amountCents, 0),
+    });
+
+    const safeName = req.project!.name.replace(/[^a-z0-9-_ ]/gi, "");
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${safeName}-estimate.pdf"`);
+    res.send(Buffer.from(pdfBytes));
+  }),
+);
+
+router.get(
+  "/:id/comparison/pdf",
+  ah(async (req, res) => {
+    const rows = await buildComparisonRows(req.project!.id);
+    const owner = await prisma.user.findUnique({ where: { id: req.project!.userId } });
+
+    const pdfBytes = await buildComparisonPdf({
+      projectName: req.project!.name,
+      contractorName: owner?.name ?? "Unknown",
+      generatedAt: new Date().toISOString().slice(0, 10),
+      rows,
+      totalEstimateDebitCents: rows.reduce((s, r) => s + r.estimateDebitCents, 0),
+      totalActualDebitCents: rows.reduce((s, r) => s + r.actualDebitCents, 0),
+      totalEstimateCreditCents: rows.reduce((s, r) => s + r.estimateCreditCents, 0),
+      totalActualCreditCents: rows.reduce((s, r) => s + r.actualCreditCents, 0),
+    });
+
+    const safeName = req.project!.name.replace(/[^a-z0-9-_ ]/gi, "");
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${safeName}-comparison.pdf"`);
     res.send(Buffer.from(pdfBytes));
   }),
 );
@@ -145,55 +207,58 @@ router.get(
   }),
 );
 
+// Shared by the comparison tab and its PDF, so the printed sheet can never
+// drift from what's on screen.
+async function buildComparisonRows(projectId: string) {
+  const transactions = await prisma.transaction.findMany({
+    where: { projectId },
+    include: { category: true },
+  });
+
+  type Row = {
+    categoryId: string | null;
+    categoryName: string;
+    estimateDebitCents: number;
+    estimateCreditCents: number;
+    actualDebitCents: number;
+    actualCreditCents: number;
+  };
+  const rows = new Map<string, Row>();
+
+  for (const tx of transactions) {
+    const key = tx.categoryId ?? "uncategorized";
+    const row: Row = rows.get(key) ?? {
+      categoryId: tx.categoryId,
+      categoryName: tx.category?.name ?? "Uncategorized",
+      estimateDebitCents: 0,
+      estimateCreditCents: 0,
+      actualDebitCents: 0,
+      actualCreditCents: 0,
+    };
+    const field = `${tx.mode === "ESTIMATE" ? "estimate" : "actual"}${tx.type === "DEBIT" ? "Debit" : "Credit"}Cents` as
+      | "estimateDebitCents"
+      | "estimateCreditCents"
+      | "actualDebitCents"
+      | "actualCreditCents";
+    row[field] += tx.amountCents;
+    rows.set(key, row);
+  }
+
+  return Array.from(rows.values()).map((row) => ({
+    ...row,
+    varianceDebitCents: row.actualDebitCents - row.estimateDebitCents,
+    varianceCreditCents: row.actualCreditCents - row.estimateCreditCents,
+  }));
+}
+
 router.get(
   "/:id/comparison",
   ah(async (req, res) => {
-    const projectId = req.project!.id;
-    const transactions = await prisma.transaction.findMany({
-      where: { projectId },
-      include: { category: true },
-    });
-
-    type Row = {
-      categoryId: string | null;
-      categoryName: string;
-      estimateDebitCents: number;
-      estimateCreditCents: number;
-      actualDebitCents: number;
-      actualCreditCents: number;
-    };
-    const rows = new Map<string, Row>();
-
-    for (const tx of transactions) {
-      const key = tx.categoryId ?? "uncategorized";
-      const row: Row = rows.get(key) ?? {
-        categoryId: tx.categoryId,
-        categoryName: tx.category?.name ?? "Uncategorized",
-        estimateDebitCents: 0,
-        estimateCreditCents: 0,
-        actualDebitCents: 0,
-        actualCreditCents: 0,
-      };
-      const field = `${tx.mode === "ESTIMATE" ? "estimate" : "actual"}${tx.type === "DEBIT" ? "Debit" : "Credit"}Cents` as
-        | "estimateDebitCents"
-        | "estimateCreditCents"
-        | "actualDebitCents"
-        | "actualCreditCents";
-      row[field] += tx.amountCents;
-      rows.set(key, row);
-    }
-
-    const result = Array.from(rows.values()).map((row) => ({
-      ...row,
-      varianceDebitCents: row.actualDebitCents - row.estimateDebitCents,
-      varianceCreditCents: row.actualCreditCents - row.estimateCreditCents,
-    }));
-
-    res.json(result);
+    res.json(await buildComparisonRows(req.project!.id));
   }),
 );
 
-async function buildReportData(req: Request): Promise<ReportData> {
+async function buildReportData(req: Request, detailed = false): Promise<ReportData> {
   const projectId = req.project!.id;
   const { dateFrom, dateTo } = req.query as { dateFrom?: string; dateTo?: string };
 
@@ -227,6 +292,17 @@ async function buildReportData(req: Request): Promise<ReportData> {
     contractorName: owner?.name ?? "Unknown",
     dateFrom: dateFrom ?? null,
     dateTo: dateTo ?? null,
+    transactions: detailed
+      ? [...transactions]
+          .sort((a, b) => (a.date?.getTime() ?? 0) - (b.date?.getTime() ?? 0))
+          .map((t) => ({
+            date: t.date ? t.date.toISOString().slice(0, 10) : "",
+            type: t.type,
+            categoryName: t.category?.name ?? "Uncategorized",
+            description: t.description,
+            amountCents: t.amountCents,
+          }))
+      : undefined,
     generatedAt: new Date().toISOString().slice(0, 10),
     credits,
     debits,

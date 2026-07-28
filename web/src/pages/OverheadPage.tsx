@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { api } from "../api";
+import { api, fetchBlob } from "../api";
 import { useView, withViewParams } from "../context/ViewContext";
 import { Modal } from "../components/Modal";
 import { BackLink } from "../components/BackLink";
@@ -179,6 +179,22 @@ export function OverheadPage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<OverheadExpense | "new" | null>(null);
   const [showCategories, setShowCategories] = useState(false);
+  const [printing, setPrinting] = useState(false);
+
+  async function handlePrint() {
+    // Open the tab synchronously, in direct response to the click, so the
+    // browser doesn't treat it as a popup once the async fetch resolves.
+    const pdfWindow = window.open("", "_blank");
+    setPrinting(true);
+    try {
+      const blob = await fetchBlob(withViewParams(`/overhead/pdf?year=${year}`, view));
+      const url = URL.createObjectURL(blob);
+      if (pdfWindow) pdfWindow.location.href = url;
+      else window.location.href = url;
+    } finally {
+      setPrinting(false);
+    }
+  }
 
   function loadExpenses() {
     setLoading(true);
@@ -241,6 +257,13 @@ export function OverheadPage() {
               </option>
             ))}
           </select>
+          <button
+            onClick={handlePrint}
+            disabled={printing}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {printing ? "Preparing…" : "Print"}
+          </button>
           {!view.readOnly && (
             <>
               <button

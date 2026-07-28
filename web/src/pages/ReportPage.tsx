@@ -17,6 +17,7 @@ export function ReportPage() {
   const [dateTo, setDateTo] = useState("");
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
+  const [detailed, setDetailed] = useState(false);
 
   function reportPath(): string {
     const params = new URLSearchParams();
@@ -43,7 +44,9 @@ export function ReportPage() {
     const pdfWindow = window.open("", "_blank");
     setOpening(true);
     try {
-      const blob = await fetchBlob(withViewParams(reportPath().replace("/report", "/report/pdf"), view));
+      const path = reportPath().replace("/report", "/report/pdf");
+      const withDetail = detailed ? `${path}${path.includes("?") ? "&" : "?"}detailed=true` : path;
+      const blob = await fetchBlob(withViewParams(withDetail, view));
       const url = URL.createObjectURL(blob);
       if (pdfWindow) {
         pdfWindow.location.href = url;
@@ -72,9 +75,15 @@ export function ReportPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-slate-900">{report.projectName} — Report</h1>
-        <button onClick={handleView} disabled={opening} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-          {opening ? "Preparing…" : "View PDF"}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+            <input type="checkbox" checked={detailed} onChange={(e) => setDetailed(e.target.checked)} className="h-4 w-4 rounded border-slate-300" />
+            Itemize every entry
+          </label>
+          <button onClick={handleView} disabled={opening} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+            {opening ? "Preparing…" : "View PDF"}
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-4">

@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma";
 import { ah } from "../lib/asyncHandler";
 import { requireAuth, withEffectiveUser } from "../lib/auth";
 import { assertPositiveCents } from "../lib/money";
+import { buildOverheadPdf } from "../lib/pdf";
 import type { Prisma } from "@prisma/client";
 
 const router = Router();
@@ -99,6 +100,39 @@ router.get(
     if (categoryId) where.categoryId = categoryId;
     const expenses = await prisma.overheadExpense.findMany({ where, orderBy: { date: "desc" }, include: { category: true } });
     res.json(expenses);
+  }),
+);
+
+router.get(
+  "/pdf",
+  ah(async (req, res) => {
+    const year = req.query.year ? Number(req.query.year) : new Date().getUTCFullYear();
+    const expenses = await prisma.overheadExpense.findMany({
+      where: {
+        userId: req.effectiveUserId,
+        date: { gte: new Date(Date.UTC(year, 0, 1)), lt: new Date(Date.UTC(year + 1, 0, 1)) },
+      },
+      orderBy: { date: "asc" },
+      include: { category: true },
+    });
+    const owner = await prisma.user.findUnique({ where: { id: req.effectiveUserId! } });
+
+    const pdfBytes = await buildOverheadPdf({
+      year,
+      contractorName: owner?.name ?? "Unknown",
+      generatedAt: new Date().toISOString().slice(0, 10),
+      expenses: expenses.map((e) => ({
+        date: e.date.toISOString().slice(0, 10),
+        categoryName: e.category?.name ?? "Uncategorized",
+        description: e.description,
+        amountCents: e.amountCents,
+      })),
+      totalCents: expenses.reduce((s, e) => s + e.amountCents, 0),
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${year}-operating-expenses.pdf"`);
+    res.send(Buffer.from(pdfBytes));
   }),
 );
 
