@@ -100,10 +100,16 @@ model Transaction {
   category    Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   type        TransactionType
   mode        TransactionMode
-  date        DateTime        @db.Date
+  // Estimates are planned by construction phase rather than by date, so this
+  // is optional; actuals still always carry one.
+  date        DateTime?       @db.Date
   amountCents Int
   description String?
   notes       String?
+  // Free-text construction phase ("Site work", "Frame", "Mids", "Finish").
+  // Stored on the row rather than as its own table so a phase can be typed
+  // once and offered thereafter, with no separate list to maintain.
+  phase       String?
   // Manual position within a project's estimate, so line items can be put in
   // construction order. Null until a row has been moved; those sort last and
   // fall back to creation order, so existing data needs no backfill.

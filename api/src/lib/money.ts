@@ -14,6 +14,18 @@ export function assertPositiveCents(cents: number) {
   }
 }
 
+// An estimate line may sit at zero: the scope gets laid out during planning
+// and priced once the order of operations is settled. An actual entry always
+// represents money that actually moved, so zero there is a data-entry slip.
+export function assertAmountCents(cents: number, mode: "ESTIMATE" | "ACTUAL") {
+  if (!Number.isInteger(cents) || cents < 0) {
+    throw new Error("Amount must be a positive number");
+  }
+  if (mode === "ACTUAL" && cents === 0) {
+    throw new Error("Amount must be a positive number");
+  }
+}
+
 // Profit as a percentage of revenue (margin), not of cost (markup):
 // (Credits - Debits) / Credits. Null when there's no revenue to divide by.
 export function profitPercent(creditsCents: number, debitsCents: number): number | null {

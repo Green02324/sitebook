@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma";
 import { ah } from "../lib/asyncHandler";
-import { assertPositiveCents } from "../lib/money";
+import { assertAmountCents } from "../lib/money";
 import type { Prisma, TransactionMode, TransactionType } from "@prisma/client";
 
 const router = Router({ mergeParams: true });
@@ -66,7 +66,7 @@ router.put(
 router.post(
   "/",
   ah(async (req, res) => {
-    const { type, mode, date, amountCents, categoryId, description, notes } = req.body as {
+    const { type, mode, date, amountCents, categoryId, description, notes, phase } = req.body as {
       type?: TransactionType;
       mode?: TransactionMode;
       date?: string;
@@ -74,13 +74,20 @@ router.post(
       categoryId?: string | null;
       description?: string;
       notes?: string;
+      phase?: string | null;
     };
-    if (!type || !mode || !date || amountCents === undefined) {
-      res.status(400).json({ error: "type, mode, date, and amountCents are required" });
+    if (!type || !mode || amountCents === undefined) {
+      res.status(400).json({ error: "type, mode, and amountCents are required" });
+      return;
+    }
+    // Estimates are organised by phase, not by date; actuals still need one so
+    // the ledger and dated reports stay complete.
+    if (mode === "ACTUAL" && !date) {
+      res.status(400).json({ error: "date is required for actual entries" });
       return;
     }
     try {
-      assertPositiveCents(amountCents);
+      assertAmountCents(amountCents, mode);
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
       return;
@@ -97,11 +104,12 @@ router.post(
         projectId: req.project!.id,
         type,
         mode,
-        date: new Date(date),
+        date: date ? new Date(date) : null,
         amountCents,
         categoryId: categoryId ?? null,
         description,
         notes,
+        phase: phase?.trim() || null,
       },
     });
     res.status(201).json(transaction);
@@ -117,25 +125,27 @@ router.put(
       return;
     }
 
-    const { type, mode, date, amountCents, categoryId, description, notes } = req.body as {
+    const { type, mode, date, amountCents, categoryId, description, notes, phase } = req.body as {
       type?: TransactionType;
       mode?: TransactionMode;
-      date?: string;
+      date?: string | null;
       amountCents?: number;
       categoryId?: string | null;
       description?: string;
       notes?: string;
+      phase?: string | null;
     };
 
     const data: Prisma.TransactionUpdateInput = {};
     if (type !== undefined) data.type = type;
     if (mode !== undefined) data.mode = mode;
-    if (date !== undefined) data.date = new Date(date);
+    if (date !== undefined) data.date = date ? new Date(date) : null;
     if (description !== undefined) data.description = description;
     if (notes !== undefined) data.notes = notes;
+    if (phase !== undefined) data.phase = phase?.trim() || null;
     if (amountCents !== undefined) {
       try {
-        assertPositiveCents(amountCents);
+        assertAmountCents(amountCents, mode ?? existing.mode);
       } catch (err) {
         res.status(400).json({ error: (err as Error).message });
         return;

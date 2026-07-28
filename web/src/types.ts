@@ -43,12 +43,14 @@ export interface Category {
 
 export interface Transaction {
   id: string;
+  phase: string | null;
   projectId: string;
   categoryId: string | null;
   category?: Category | null;
   type: TransactionType;
   mode: TransactionMode;
-  date: string;
+  // Null on estimates, which are organised by phase instead of by date.
+  date: string | null;
   amountCents: number;
   description: string | null;
   notes: string | null;

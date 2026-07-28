@@ -11,9 +11,12 @@ interface TransactionTableProps {
   // Supplied only where a hand-set order means something (the estimate), so
   // the actuals ledger keeps its date ordering.
   onMove?: (tx: Transaction, direction: -1 | 1) => void;
+  // Estimates are planned by construction phase and carry no date, so the
+  // first column shows the phase instead.
+  showPhase?: boolean;
 }
 
-export function TransactionTable({ transactions, readOnly, onEdit, onDelete, hideType, emptyLabel, onMove }: TransactionTableProps) {
+export function TransactionTable({ transactions, readOnly, onEdit, onDelete, hideType, emptyLabel, onMove, showPhase }: TransactionTableProps) {
   if (transactions.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">{emptyLabel ?? "No transactions yet."}</div>
@@ -25,7 +28,7 @@ export function TransactionTable({ transactions, readOnly, onEdit, onDelete, hid
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
           <tr>
-            <th className="px-4 py-2">Date</th>
+            <th className="px-4 py-2">{showPhase ? "Phase" : "Date"}</th>
             {!hideType && <th className="px-4 py-2">Type</th>}
             <th className="px-4 py-2">Category</th>
             <th className="px-4 py-2">Notes</th>
@@ -36,7 +39,9 @@ export function TransactionTable({ transactions, readOnly, onEdit, onDelete, hid
         <tbody className="divide-y divide-slate-100">
           {transactions.map((tx, i) => (
             <tr key={tx.id} className="hover:bg-slate-50">
-              <td className="whitespace-nowrap px-4 py-2 text-slate-600">{new Date(tx.date).toLocaleDateString()}</td>
+              <td className="whitespace-nowrap px-4 py-2 text-slate-600">
+                {showPhase ? (tx.phase ?? <span className="text-slate-400">—</span>) : tx.date ? new Date(tx.date).toLocaleDateString() : "—"}
+              </td>
               {!hideType && (
                 <td className="px-4 py-2">
                   <span

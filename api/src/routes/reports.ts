@@ -20,6 +20,13 @@ import {
 const router = Router();
 router.use(requireAuth, withEffectiveUser);
 
+// The date column is nullable because estimates are planned by phase instead.
+// Everything in these reports is mode ACTUAL, which the API always requires a
+// date for, so the fallback here is unreachable in practice.
+function dateOnly(date: Date | null): string {
+  return date ? date.toISOString().slice(0, 10) : "";
+}
+
 function yearRange(req: Request): { year: number; yearStart: Date; yearEnd: Date } {
   const year = req.query.year ? Number(req.query.year) : new Date().getUTCFullYear();
   return { year, yearStart: new Date(Date.UTC(year, 0, 1)), yearEnd: new Date(Date.UTC(year + 1, 0, 1)) };
@@ -83,7 +90,7 @@ async function buildDetailed(userId: string, req: Request): Promise<AnnualDetail
         orderBy: { date: "asc" },
       });
       const lines: DetailedTxLine[] = transactions.map((t) => ({
-        date: t.date.toISOString().slice(0, 10),
+        date: dateOnly(t.date),
         type: t.type,
         categoryName: t.category?.name ?? "Uncategorized",
         amountCents: t.amountCents,
@@ -122,7 +129,7 @@ async function buildLedger(userId: string, req: Request): Promise<AnnualLedgerDa
   const debits: LedgerLine[] = [];
   for (const tx of transactions) {
     const line: LedgerLine = {
-      date: tx.date.toISOString().slice(0, 10),
+      date: dateOnly(tx.date),
       source: tx.project.name,
       categoryName: tx.category?.name ?? "Uncategorized",
       amountCents: tx.amountCents,

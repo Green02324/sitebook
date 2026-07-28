@@ -130,6 +130,21 @@ router.get(
   }),
 );
 
+// Phases a project has actually used, so the estimate form can offer them
+// back without maintaining a separate list to keep in sync.
+router.get(
+  "/:id/phases",
+  ah(async (req, res) => {
+    const rows = await prisma.transaction.findMany({
+      where: { projectId: req.project!.id, phase: { not: null } },
+      distinct: ["phase"],
+      select: { phase: true },
+      orderBy: { phase: "asc" },
+    });
+    res.json(rows.map((r) => r.phase).filter((p): p is string => Boolean(p)));
+  }),
+);
+
 router.get(
   "/:id/comparison",
   ah(async (req, res) => {

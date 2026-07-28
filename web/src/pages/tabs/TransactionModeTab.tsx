@@ -3,10 +3,10 @@ import { useOutletContext } from "react-router-dom";
 import { api } from "../../api";
 import { useView, withViewParams } from "../../context/ViewContext";
 import { TransactionTable } from "../../components/TransactionTable";
-import { TransactionFormModal } from "../../components/TransactionFormModal";
+import { TransactionFormModal, type TransactionFormPayload } from "../../components/TransactionFormModal";
 import { formatCents, formatPercent, profitPercent, centsToInputValue } from "../../lib/money";
 import type { ProjectDetailContext } from "../ProjectDetail";
-import type { Category, Transaction, TransactionMode, TransactionType } from "../../types";
+import type { Category, Transaction, TransactionMode } from "../../types";
 
 // The three fields are one relationship seen from three sides:
 //   price = cost + profit$        profit% = profit$ / price
@@ -133,6 +133,7 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
   const [loading, setLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [editing, setEditing] = useState<Transaction | "new" | null>(null);
+  const [phases, setPhases] = useState<string[]>([]);
 
   function load() {
     setLoading(true);
@@ -144,8 +145,18 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
       .finally(() => setLoading(false));
   }
 
+  function loadPhases() {
+    if (mode !== "ESTIMATE") return;
+    api
+      .get<string[]>(withViewParams(`/projects/${project.id}/phases`, view))
+      .then(setPhases)
+      .catch(() => {});
+  }
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, [project.id, mode, categoryFilter, view.targetUserId, view.readOnly]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(loadPhases, [project.id, mode, view.targetUserId, view.readOnly]);
 
   const debitTransactions = transactions.filter((t) => t.type === "DEBIT");
   const creditTransactions = transactions.filter((t) => t.type === "CREDIT");
@@ -160,7 +171,7 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
     return category;
   }
 
-  async function handleSubmit(data: { type: TransactionType; date: string; amountCents: number; categoryId: string | null; notes: string | null }) {
+  async function handleSubmit(data: TransactionFormPayload) {
     if (editing && editing !== "new") {
       await api.put(`/projects/${project.id}/transactions/${editing.id}`, { ...data, mode });
     } else {
@@ -168,6 +179,8 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
     }
     setEditing(null);
     load();
+    // A newly typed phase becomes selectable for the next line item.
+    loadPhases();
   }
 
   async function handleDelete(tx: Transaction) {
@@ -234,6 +247,7 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
               onEdit={setEditing}
               onDelete={handleDelete}
               onMove={mode === "ESTIMATE" ? handleMove : undefined}
+              showPhase={mode === "ESTIMATE"}
               hideType
               emptyLabel="No debits yet."
             />
@@ -251,6 +265,7 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
               onEdit={setEditing}
               onDelete={handleDelete}
               onMove={mode === "ESTIMATE" ? handleMove : undefined}
+              showPhase={mode === "ESTIMATE"}
               hideType
               emptyLabel="No credits yet."
             />
@@ -266,6 +281,7 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
         <TransactionFormModal
           mode={mode}
           categories={categories}
+          phases={phases}
           initial={editing === "new" ? null : editing}
           onClose={() => setEditing(null)}
           onSubmit={handleSubmit}
