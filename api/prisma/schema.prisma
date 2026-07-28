@@ -104,6 +104,10 @@ model Transaction {
   amountCents Int
   description String?
   notes       String?
+  // Manual position within a project's estimate, so line items can be put in
+  // construction order. Null until a row has been moved; those sort last and
+  // fall back to creation order, so existing data needs no backfill.
+  sortOrder   Int?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 

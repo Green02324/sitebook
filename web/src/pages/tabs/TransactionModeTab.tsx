@@ -176,6 +176,28 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
     load();
   }
 
+  // Swaps with the neighbour inside its own debit/credit group, then persists
+  // the whole list's order. Optimistic — the row moves on click and only snaps
+  // back if the save fails.
+  async function handleMove(tx: Transaction, direction: -1 | 1) {
+    const group = transactions.filter((t) => t.type === tx.type);
+    const target = group.findIndex((t) => t.id === tx.id) + direction;
+    if (target < 0 || target >= group.length) return;
+
+    const next = [...transactions];
+    const from = next.findIndex((t) => t.id === tx.id);
+    const to = next.findIndex((t) => t.id === group[target].id);
+    [next[from], next[to]] = [next[to], next[from]];
+
+    const previous = transactions;
+    setTransactions(next);
+    try {
+      await api.put(`/projects/${project.id}/transactions/reorder`, { ids: next.map((t) => t.id) });
+    } catch {
+      setTransactions(previous);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {mode === "ESTIMATE" ? (
@@ -206,7 +228,15 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
         <>
           <div className="flex flex-col gap-2">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Debits</h3>
-            <TransactionTable transactions={debitTransactions} readOnly={readOnly} onEdit={setEditing} onDelete={handleDelete} hideType emptyLabel="No debits yet." />
+            <TransactionTable
+              transactions={debitTransactions}
+              readOnly={readOnly}
+              onEdit={setEditing}
+              onDelete={handleDelete}
+              onMove={mode === "ESTIMATE" ? handleMove : undefined}
+              hideType
+              emptyLabel="No debits yet."
+            />
             <div className="flex justify-between px-1 text-sm font-semibold text-rose-700">
               <span>Total Debits</span>
               <span>{formatCents(totals.debitCents)}</span>
@@ -215,7 +245,15 @@ export function TransactionModeTab({ mode }: { mode: TransactionMode }) {
 
           <div className="flex flex-col gap-2">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Credits</h3>
-            <TransactionTable transactions={creditTransactions} readOnly={readOnly} onEdit={setEditing} onDelete={handleDelete} hideType emptyLabel="No credits yet." />
+            <TransactionTable
+              transactions={creditTransactions}
+              readOnly={readOnly}
+              onEdit={setEditing}
+              onDelete={handleDelete}
+              onMove={mode === "ESTIMATE" ? handleMove : undefined}
+              hideType
+              emptyLabel="No credits yet."
+            />
             <div className="flex justify-between px-1 text-sm font-semibold text-emerald-700">
               <span>Total Credits</span>
               <span>{formatCents(totals.creditCents)}</span>

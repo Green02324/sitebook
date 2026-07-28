@@ -20,10 +20,46 @@ router.get(
     if (type) where.type = type;
     if (categoryId) where.categoryId = categoryId;
 
-    const orderBy: Prisma.TransactionOrderByWithRelationInput = sort === "amount" ? { amountCents: "desc" } : { date: "desc" };
+    // Estimates carry a hand-set construction order; actuals stay in date
+    // order so they still read like a ledger against receipts. Rows that have
+    // never been moved sort last and fall back to creation order.
+    const orderBy: Prisma.TransactionOrderByWithRelationInput[] =
+      mode === "ESTIMATE" && sort !== "amount"
+        ? [{ sortOrder: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }]
+        : [sort === "amount" ? { amountCents: "desc" } : { date: "desc" }];
 
     const transactions = await prisma.transaction.findMany({ where, orderBy, include: { category: true } });
     res.json(transactions);
+  }),
+);
+
+// Takes the full ordered list of ids and writes positions, rather than
+// swapping neighbours — idempotent, and it doesn't have to reason about rows
+// whose sortOrder is still null.
+router.put(
+  "/reorder",
+  ah(async (req, res) => {
+    const { ids } = req.body as { ids?: unknown };
+    if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string")) {
+      res.status(400).json({ error: "ids must be an array of transaction ids" });
+      return;
+    }
+
+    // Only reposition rows that actually belong to this project, so a stale or
+    // tampered list can't touch another job's line items.
+    const owned = await prisma.transaction.findMany({
+      where: { id: { in: ids as string[] }, projectId: req.project!.id },
+      select: { id: true },
+    });
+    const ownedIds = new Set(owned.map((t) => t.id));
+
+    await prisma.$transaction(
+      (ids as string[])
+        .filter((id) => ownedIds.has(id))
+        .map((id, index) => prisma.transaction.update({ where: { id }, data: { sortOrder: index } })),
+    );
+
+    res.status(204).end();
   }),
 );
 

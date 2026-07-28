@@ -8,9 +8,12 @@ interface TransactionTableProps {
   onDelete: (tx: Transaction) => void;
   hideType?: boolean;
   emptyLabel?: string;
+  // Supplied only where a hand-set order means something (the estimate), so
+  // the actuals ledger keeps its date ordering.
+  onMove?: (tx: Transaction, direction: -1 | 1) => void;
 }
 
-export function TransactionTable({ transactions, readOnly, onEdit, onDelete, hideType, emptyLabel }: TransactionTableProps) {
+export function TransactionTable({ transactions, readOnly, onEdit, onDelete, hideType, emptyLabel, onMove }: TransactionTableProps) {
   if (transactions.length === 0) {
     return (
       <div className="rounded-md border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">{emptyLabel ?? "No transactions yet."}</div>
@@ -31,7 +34,7 @@ export function TransactionTable({ transactions, readOnly, onEdit, onDelete, hid
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {transactions.map((tx) => (
+          {transactions.map((tx, i) => (
             <tr key={tx.id} className="hover:bg-slate-50">
               <td className="whitespace-nowrap px-4 py-2 text-slate-600">{new Date(tx.date).toLocaleDateString()}</td>
               {!hideType && (
@@ -50,6 +53,28 @@ export function TransactionTable({ transactions, readOnly, onEdit, onDelete, hid
               </td>
               {!readOnly && (
                 <td className="whitespace-nowrap px-4 py-2 text-right">
+                  {onMove && (
+                    <span className="mr-3 inline-flex align-middle">
+                      <button
+                        onClick={() => onMove(tx, -1)}
+                        disabled={i === 0}
+                        aria-label="Move up"
+                        title="Move up"
+                        className="rounded px-1.5 py-0.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-25 disabled:hover:bg-transparent"
+                      >
+                        ▲
+                      </button>
+                      <button
+                        onClick={() => onMove(tx, 1)}
+                        disabled={i === transactions.length - 1}
+                        aria-label="Move down"
+                        title="Move down"
+                        className="rounded px-1.5 py-0.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-25 disabled:hover:bg-transparent"
+                      >
+                        ▼
+                      </button>
+                    </span>
+                  )}
                   <button onClick={() => onEdit(tx)} className="mr-3 text-xs font-medium text-indigo-600 hover:underline">
                     Edit
                   </button>
