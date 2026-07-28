@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { formatCents, formatPercent } from "../lib/money";
+import { OVERHEAD_LABEL } from "../lib/labels";
 
 export interface DonutExpenseSlice {
   key: string;
@@ -160,7 +161,7 @@ export function DonutChart({ totalIncomeCents, netCents, slices, loadDetail }: D
           middle of the sub-donut — long job names have no room to wrap inside
           the inner circle without colliding with the amount. */}
       {activeKey && (
-        <div className="max-w-xs text-center text-base font-semibold text-slate-900">{activeSlice?.label ?? "Overhead"}</div>
+        <div className="max-w-xs text-center text-base font-semibold text-slate-900">{activeSlice?.label ?? OVERHEAD_LABEL}</div>
       )}
 
       {showingDetail && (

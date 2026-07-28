@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma";
 import { ah } from "../lib/asyncHandler";
 import { requireAuth, requireAdmin, toSafeUser } from "../lib/auth";
 import { createUserByAdmin, resetUserPassword } from "../lib/users";
+import { OVERHEAD_LABEL } from "../lib/labels";
 
 const router = Router();
 router.use(requireAuth);
@@ -102,7 +103,7 @@ router.get(
     const breakdown = [
       { label: "Transactions", bytes: transactions, color: "#0a84ff" },
       { label: "Projects", bytes: projects + categories, color: "#ff9500" },
-      { label: "Overhead", bytes: overheadExpenses + overheadCategories, color: "#af52de" },
+      { label: OVERHEAD_LABEL, bytes: overheadExpenses + overheadCategories, color: "#af52de" },
       { label: "Accounts & sessions", bytes: users + refreshTokens, color: "#34c759" },
     ];
     const accounted = breakdown.reduce((sum, b) => sum + b.bytes, 0);

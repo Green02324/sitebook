@@ -5,6 +5,7 @@ import { Modal } from "../components/Modal";
 import { BackLink } from "../components/BackLink";
 import { CategorySelect } from "../components/CategorySelect";
 import { formatCents, toCents, centsToInputValue } from "../lib/money";
+import { OVERHEAD_LABEL, OVERHEAD_LABEL_FULL } from "../lib/labels";
 import type { OverheadCategory, OverheadExpense } from "../types";
 
 function OverheadFormModal({
@@ -51,7 +52,7 @@ function OverheadFormModal({
   }
 
   return (
-    <Modal title={initial ? "Edit Overhead Expense" : "Add Overhead Expense"} onClose={onClose}>
+    <Modal title={initial ? "Edit Operating Expense" : "Add Operating Expense"} onClose={onClose}>
       <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
         <label className="text-sm font-medium text-slate-700">
           Date
@@ -125,7 +126,7 @@ function OverheadCategoriesModal({ categories, onClose, onChanged }: { categorie
   }
 
   return (
-    <Modal title="Manage Overhead Categories" onClose={onClose}>
+    <Modal title={`Manage ${OVERHEAD_LABEL} Categories`} onClose={onClose}>
       <div className="flex flex-col gap-2">
         {categories.map((c) => (
           <div key={c.id} className="flex items-center justify-between gap-2 rounded-md border border-slate-200 px-3 py-2">
@@ -227,7 +228,7 @@ export function OverheadPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-slate-900">Overhead</h1>
+        <h1 className="text-2xl font-bold text-slate-900">{OVERHEAD_LABEL_FULL}</h1>
         <div className="flex gap-2">
           <select
             value={year}
@@ -257,7 +258,7 @@ export function OverheadPage() {
       </div>
 
       <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4">
-        <span className="text-sm font-semibold text-slate-700">Total Overhead ({year})</span>
+        <span className="text-sm font-semibold text-slate-700">Total {OVERHEAD_LABEL} ({year})</span>
         <span className="text-sm font-semibold text-rose-700">{formatCents(totalCents)}</span>
       </div>
 
@@ -297,7 +298,7 @@ export function OverheadPage() {
               {expenses.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">
-                    No overhead expenses for {year}.
+                    No operating expenses for {year}.
                   </td>
                 </tr>
               )}

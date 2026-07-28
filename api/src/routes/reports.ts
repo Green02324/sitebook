@@ -5,6 +5,7 @@ import { ah } from "../lib/asyncHandler";
 import { requireAuth, withEffectiveUser } from "../lib/auth";
 import { profitPercent } from "../lib/money";
 import { projectAttributedYear } from "../lib/projectYear";
+import { OVERHEAD_LABEL } from "../lib/labels";
 import {
   buildAnnualSummaryPdf,
   buildAnnualDetailedPdf,
@@ -136,7 +137,7 @@ async function buildLedger(userId: string, req: Request): Promise<AnnualLedgerDa
     orderBy: { date: "asc" },
   });
   for (const e of overheadExpenses) {
-    debits.push({ date: e.date.toISOString().slice(0, 10), source: "Overhead", categoryName: e.category?.name ?? "Uncategorized", amountCents: e.amountCents });
+    debits.push({ date: e.date.toISOString().slice(0, 10), source: OVERHEAD_LABEL, categoryName: e.category?.name ?? "Uncategorized", amountCents: e.amountCents });
   }
   debits.sort((a, b) => a.date.localeCompare(b.date));
 

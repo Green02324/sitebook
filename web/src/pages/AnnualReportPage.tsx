@@ -3,6 +3,7 @@ import { api, fetchBlob } from "../api";
 import { useView, withViewParams } from "../context/ViewContext";
 import { BackLink } from "../components/BackLink";
 import { formatCents, formatPercent } from "../lib/money";
+import { OVERHEAD_LABEL } from "../lib/labels";
 import type { AnnualDetailedResponse, AnnualLedgerResponse, AnnualSummaryResponse, DetailedTxLine, LedgerLine } from "../types";
 
 type ViewKey = "summary" | "detailed" | "ledger";
@@ -126,7 +127,7 @@ function SummaryView({ data }: { data: AnnualSummaryResponse }) {
           <span className="font-semibold text-slate-900">{formatCents(totalProjectNet)}</span>
         </div>
         <div className="flex justify-between text-sm">
-          <span className="font-medium text-slate-600">Overhead</span>
+          <span className="font-medium text-slate-600">{OVERHEAD_LABEL}</span>
           <span className="font-semibold text-rose-700">({formatCents(data.overheadCents)})</span>
         </div>
         <div className="flex justify-between border-t border-slate-200 pt-2 text-lg font-bold">
@@ -149,7 +150,7 @@ function DetailedView({ data }: { data: AnnualDetailedResponse }) {
       ))}
       {data.overhead.length > 0 && (
         <div className="flex flex-col gap-2">
-          <h2 className="font-semibold text-slate-900">Overhead</h2>
+          <h2 className="font-semibold text-slate-900">{OVERHEAD_LABEL}</h2>
           <TxTable rows={data.overhead} />
         </div>
       )}

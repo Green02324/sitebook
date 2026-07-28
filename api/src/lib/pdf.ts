@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from "pdf-lib";
+import { OVERHEAD_LABEL } from "./labels";
 
 export interface ReportLine {
   categoryName: string;
@@ -246,7 +247,7 @@ export async function buildAnnualSummaryPdf(data: AnnualSummaryData): Promise<Ui
 
   b.gap(16);
   b.row("Total Project Net", formatCents(data.projects.reduce((s, p) => s + p.netCents, 0)), { bold: true });
-  b.row("Overhead", `(${formatCents(data.overheadCents)})`);
+  b.row(OVERHEAD_LABEL, `(${formatCents(data.overheadCents)})`);
   b.row("Annual Net Profit", formatCents(data.grandNetCents), { bold: true });
 
   return b.save();
@@ -278,7 +279,7 @@ export async function buildAnnualDetailedPdf(data: AnnualDetailedData): Promise<
   }
 
   if (data.overhead.length > 0) {
-    b.subheading("Overhead");
+    b.subheading(OVERHEAD_LABEL);
     b.table(
       columns,
       data.overhead.map((t) => [t.date, "Debit", t.categoryName, t.description ?? "", formatCents(t.amountCents)]),

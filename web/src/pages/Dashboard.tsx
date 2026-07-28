@@ -6,6 +6,7 @@ import { DonutChart, type DonutDetail, type DonutExpenseSlice } from "../compone
 import { YearSelector } from "../components/YearSelector";
 import { ProjectStatusBadge } from "../components/ProjectStatusBadge";
 import { formatCents } from "../lib/money";
+import { OVERHEAD_LABEL } from "../lib/labels";
 import type { DashboardBreakdown, DashboardResponse } from "../types";
 
 function basePath(readOnly: boolean, targetUserId: string): string {
@@ -43,7 +44,7 @@ export function Dashboard() {
 
   const slices: DonutExpenseSlice[] = [
     ...data.projects.map((p, i) => ({ key: p.id, label: p.name, amountCents: p.expenseCents, color: PROJECT_PALETTE[i % PROJECT_PALETTE.length] })),
-    { key: OVERHEAD_KEY, label: "Overhead", amountCents: data.overheadCents, color: OVERHEAD_COLOR },
+    { key: OVERHEAD_KEY, label: OVERHEAD_LABEL, amountCents: data.overheadCents, color: OVERHEAD_COLOR },
   ];
   const netCents = data.totalIncomeCents - data.totalExpenseCents - data.overheadCents;
 
