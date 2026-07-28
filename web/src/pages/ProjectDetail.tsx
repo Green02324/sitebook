@@ -145,9 +145,11 @@ function ProjectInfoLine({ project }: { project: Project }) {
   if (!hasClient && !hasTerms) return null;
 
   // Two columns side by side on anything wider than a phone; stacked below
-  // that, so neither column wraps mid-item on a narrow screen.
+  // that, so neither column wraps mid-item on a narrow screen. Bottom-aligned
+  // once side by side — the terms column is shorter, and hanging it off the
+  // top left it floating against the taller client block.
   return (
-    <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:gap-12">
+    <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-12">
       {hasClient && (
         <div className="flex flex-col gap-0.5">
           {project.clientName && <span className="text-base font-bold text-slate-900">{project.clientName}</span>}
