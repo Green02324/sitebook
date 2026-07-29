@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { Logo } from "../components/Logo";
 
 export function Login() {
   const { login } = useAuth();
@@ -27,7 +28,11 @@ export function Login() {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-slate-100 px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-[calc(env(safe-area-inset-top)+1rem)]">
       <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-md sm:p-8">
-        <h1 className="mb-6 text-center text-2xl font-bold text-slate-900">SiteBook</h1>
+        <div className="mb-6 flex flex-col items-center gap-3">
+          <Logo size={64} />
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">SiteBook</h1>
+          <p className="text-center text-sm text-slate-500">Job costing and profit tracking</p>
+        </div>
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
           <label className="text-sm font-medium text-slate-700">
             Email
