@@ -31,12 +31,24 @@ export async function ensureBootstrapUser(opts: { email: string; role: Role; lab
   return user;
 }
 
+// ADMIN_EMAIL is authoritative, not just a seed: whoever it points at holds
+// the admin role, and is reactivated if they'd been switched off. That makes
+// moving admin to a different account a matter of changing the variable,
+// rather than needing a second account to exist purely to be the admin.
 export async function ensureAdminUser(): Promise<User> {
   const email = process.env.ADMIN_EMAIL;
   if (!email) {
     throw new Error("ADMIN_EMAIL environment variable is required to bootstrap the admin account");
   }
-  return ensureBootstrapUser({ email, role: "ADMIN", label: "ADMIN" });
+  const user = await ensureBootstrapUser({ email, role: "ADMIN", label: "ADMIN" });
+  if (user.role === "ADMIN" && user.deactivatedAt === null) return user;
+
+  const promoted = await prisma.user.update({
+    where: { id: user.id },
+    data: { role: "ADMIN", deactivatedAt: null },
+  });
+  console.log(`[bootstrap] Granted ADMIN to ${email} (was ${user.role}${user.deactivatedAt ? ", deactivated" : ""}).`);
+  return promoted;
 }
 
 export async function ensureOwnerUser(): Promise<User> {
@@ -61,6 +73,14 @@ export async function createUserByAdmin(email: string, name: string): Promise<{ 
 // random one, surfaced exactly once at the point of reset, is the closest
 // equivalent. Every outstanding refresh token is revoked at the same time, so
 // sessions opened with the old password can't outlive it.
+// Refusing to switch off the last way in is worth a query — an account with
+// no active admin can only be recovered by editing the database by hand.
+export async function countOtherActiveAdmins(excludeUserId: string): Promise<number> {
+  return prisma.user.count({
+    where: { role: "ADMIN", deactivatedAt: null, id: { not: excludeUserId } },
+  });
+}
+
 export async function resetUserPassword(userId: string): Promise<string> {
   const tempPassword = generateTempPassword();
   const passwordHash = await bcrypt.hash(tempPassword, 10);

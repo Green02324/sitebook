@@ -2,8 +2,9 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma";
 import { ah } from "../lib/asyncHandler";
-import { requireAuth, requireAdmin, toSafeUser } from "../lib/auth";
-import { createUserByAdmin, resetUserPassword } from "../lib/users";
+import { requireAuth, requireAdmin, requireAdminView, toSafeUser } from "../lib/auth";
+import { createUserByAdmin, resetUserPassword, countOtherActiveAdmins } from "../lib/users";
+import type { Role } from "@prisma/client";
 import { OVERHEAD_LABEL } from "../lib/labels";
 
 const router = Router();
@@ -62,7 +63,7 @@ router.put(
 
 router.get(
   "/",
-  requireAdmin,
+  requireAdminView,
   ah(async (req, res) => {
     const users = await prisma.user.findMany({
       orderBy: { createdAt: "asc" },
@@ -82,7 +83,7 @@ async function relationSize(table: string): Promise<number> {
 // Registered before "/:id" — otherwise "storage" is swallowed as a user id.
 router.get(
   "/storage",
-  requireAdmin,
+  requireAdminView,
   ah(async (_req, res) => {
     const capacityGb = Number(process.env.STORAGE_CAPACITY_GB) || 5;
     const capacityBytes = capacityGb * 1024 ** 3;
@@ -115,7 +116,7 @@ router.get(
 
 router.get(
   "/:id",
-  requireAdmin,
+  requireAdminView,
   ah(async (req, res) => {
     const user = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!user) {
@@ -176,6 +177,78 @@ router.put(
       data.email = email.trim();
     }
     const user = await prisma.user.update({ where: { id: target.id }, data });
+    res.json(toSafeUser(user));
+  }),
+);
+
+// Deactivate or restore. Nothing is deleted — the account simply can't sign
+// in, and its projects and history stay intact for the record.
+router.put(
+  "/:id/active",
+  requireAdmin,
+  ah(async (req, res) => {
+    const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!target) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    const { active } = req.body as { active?: boolean };
+    if (typeof active !== "boolean") {
+      res.status(400).json({ error: "active must be true or false" });
+      return;
+    }
+
+    if (!active) {
+      if (target.id === req.user!.id) {
+        res.status(400).json({ error: "You cannot deactivate your own account" });
+        return;
+      }
+      if (target.role === "ADMIN" && (await countOtherActiveAdmins(target.id)) === 0) {
+        res.status(400).json({ error: "This is the last active admin — promote someone else first" });
+        return;
+      }
+    }
+
+    const user = await prisma.user.update({
+      where: { id: target.id },
+      data: { deactivatedAt: active ? null : new Date() },
+    });
+    // Ending their sessions is the point of deactivating; without this they
+    // stay signed in until the refresh token lapses. Reactivating leaves the
+    // revoked tokens alone — they sign in again and get a fresh one.
+    if (!active) {
+      await prisma.refreshToken.updateMany({
+        where: { userId: target.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    }
+    res.json(toSafeUser(user));
+  }),
+);
+
+router.put(
+  "/:id/role",
+  requireAdmin,
+  ah(async (req, res) => {
+    const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!target) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    const { role } = req.body as { role?: Role };
+    if (role !== "ADMIN" && role !== "ADMIN_READONLY" && role !== "USER") {
+      res.status(400).json({ error: "role must be ADMIN, ADMIN_READONLY, or USER" });
+      return;
+    }
+    if (target.id === req.user!.id && role !== "ADMIN") {
+      res.status(400).json({ error: "You cannot remove your own admin access" });
+      return;
+    }
+    if (target.role === "ADMIN" && role !== "ADMIN" && (await countOtherActiveAdmins(target.id)) === 0) {
+      res.status(400).json({ error: "This is the last active admin — promote someone else first" });
+      return;
+    }
+    const user = await prisma.user.update({ where: { id: target.id }, data: { role } });
     res.json(toSafeUser(user));
   }),
 );

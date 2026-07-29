@@ -2,7 +2,7 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import type { Request, Response, NextFunction } from "express";
 import { prisma } from "./prisma";
-import type { Project, User } from "@prisma/client";
+import type { Project, Role, User } from "@prisma/client";
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET!;
@@ -12,7 +12,7 @@ const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 declare module "express-serve-static-core" {
   interface Request {
-    user?: { id: string; role: "ADMIN" | "USER" };
+    user?: { id: string; role: Role };
     effectiveUserId?: string;
     readOnly?: boolean;
     project?: Project;
@@ -21,10 +21,18 @@ declare module "express-serve-static-core" {
 
 export class AuthError extends Error {}
 
-export type SafeUser = Pick<User, "id" | "email" | "name" | "avatarUrl" | "role" | "createdAt">;
+export type SafeUser = Pick<User, "id" | "email" | "name" | "avatarUrl" | "role" | "createdAt" | "deactivatedAt">;
 
 export function toSafeUser(user: User): SafeUser {
-  return { id: user.id, email: user.email, name: user.name, avatarUrl: user.avatarUrl, role: user.role, createdAt: user.createdAt };
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    avatarUrl: user.avatarUrl,
+    role: user.role,
+    createdAt: user.createdAt,
+    deactivatedAt: user.deactivatedAt,
+  };
 }
 
 export function signAccessToken(user: Pick<User, "id" | "role">): string {
@@ -66,7 +74,9 @@ export async function rotateRefreshToken(
   // it — that's the signal a token was reused/stolen.
   await prisma.refreshToken.update({ where: { id: row.id }, data: { revokedAt: new Date() } });
   const user = await prisma.user.findUnique({ where: { id: row.userId } });
-  if (!user) throw new AuthError("Invalid refresh token");
+  // Also checked here, so deactivating someone ends the session they already
+  // have rather than waiting for their access token to lapse.
+  if (!user || user.deactivatedAt) throw new AuthError("Invalid refresh token");
   const accessToken = signAccessToken(user);
   const refreshToken = await issueRefreshToken(user.id);
   return { accessToken, refreshToken, user: toSafeUser(user) };
@@ -102,8 +112,19 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+// Full admin: user management and anything that writes.
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (req.user?.role !== "ADMIN") {
+    res.status(403).json({ error: "Admin access required" });
+    return;
+  }
+  next();
+}
+
+// Either admin tier — for reads: listing accounts and drilling into their
+// data. ADMIN_READONLY stops here and never reaches the mutating routes.
+export function requireAdminView(req: Request, res: Response, next: NextFunction) {
+  if (req.user?.role !== "ADMIN" && req.user?.role !== "ADMIN_READONLY") {
     res.status(403).json({ error: "Admin access required" });
     return;
   }
@@ -117,7 +138,7 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction) {
 export function withEffectiveUser(req: Request, res: Response, next: NextFunction) {
   const requested = typeof req.query.asUserId === "string" ? req.query.asUserId : undefined;
   if (requested && req.method === "GET") {
-    if (req.user?.role !== "ADMIN") {
+    if (req.user?.role !== "ADMIN" && req.user?.role !== "ADMIN_READONLY") {
       res.status(403).json({ error: "Forbidden" });
       return;
     }

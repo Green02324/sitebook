@@ -84,18 +84,20 @@ function NavContent({
         <NavLink to={`${prefix}/annual-report`} className={linkClass} onClick={onNavigate}>
           Annual Report
         </NavLink>
-        {!readOnly && isAdmin && (
-          <NavLink to="/admin" className={linkClass} onClick={onNavigate}>
-            Admin
-          </NavLink>
-        )}
         {!readOnly && (
           <NavLink to="/profile" className={linkClass} onClick={onNavigate}>
             Profile
           </NavLink>
         )}
       </nav>
+      {/* Admin sits down here with Logout rather than among the day-to-day
+          pages — it's account housekeeping, not part of the job workflow. */}
       <div className="border-t border-slate-800 p-2">
+        {!readOnly && isAdmin && (
+          <NavLink to="/admin" className={linkClass} onClick={onNavigate}>
+            Admin
+          </NavLink>
+        )}
         <button
           onClick={onLogout}
           className="w-full rounded px-3 py-2 text-left text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white"
@@ -120,7 +122,9 @@ export function Sidebar() {
   }
 
   const prefix = basePath(view.readOnly, view.targetUserId);
-  const isAdmin = user?.role === "ADMIN";
+  // Both admin tiers get the link; the read-only tier simply finds the write
+  // controls absent once inside.
+  const isAdmin = user?.role === "ADMIN" || user?.role === "ADMIN_READONLY";
 
   if (isMobile) {
     return (

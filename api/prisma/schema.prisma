@@ -9,6 +9,9 @@ datasource db {
 
 enum Role {
   ADMIN
+  // Sees every account and can drill into their data, but cannot change
+  // anything — not their records, and not user management.
+  ADMIN_READONLY
   USER
 }
 
@@ -35,6 +38,10 @@ model User {
   name              String
   avatarUrl         String?
   role              Role               @default(USER)
+  // Deactivated accounts can't sign in and their sessions are revoked, but
+  // every project, line item and expense they own stays intact and readable
+  // by admins. Null means active.
+  deactivatedAt     DateTime?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   projects          Project[]

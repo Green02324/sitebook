@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { BackLink } from "../components/BackLink";
 import { Modal } from "../components/Modal";
-import type { User, UserWithProjectCount } from "../types";
+import { useAuth } from "../context/AuthContext";
+import { ROLE_LABELS, type Role, type User, type UserWithProjectCount } from "../types";
 
 // Shown once, right after the password is generated. There is no way to look
 // an existing password up again later — they're only ever stored as hashes.
@@ -130,6 +131,10 @@ function EditUserModal({
 }
 
 export function AdminUsers() {
+  // ADMIN_READONLY reaches this page but changes nothing; the API enforces the
+  // same rule, so hiding the controls is presentation, not the guard.
+  const { user: currentUser } = useAuth();
+  const canManage = currentUser?.role === "ADMIN";
   const [users, setUsers] = useState<UserWithProjectCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -169,6 +174,33 @@ export function AdminUsers() {
     }
   }
 
+  async function handleRoleChange(user: UserWithProjectCount, role: Role) {
+    setError(null);
+    try {
+      await api.put<User>(`/users/${user.id}/role`, { role });
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+      load();
+    }
+  }
+
+  async function handleToggleActive(user: UserWithProjectCount) {
+    const active = Boolean(user.deactivatedAt);
+    if (
+      !active &&
+      !confirm(`Deactivate ${user.name}? They won't be able to sign in and will be signed out everywhere. Their projects and history are kept.`)
+    )
+      return;
+    setError(null);
+    try {
+      await api.put<User>(`/users/${user.id}/active`, { active });
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
   async function handleResetPassword(user: UserWithProjectCount) {
     if (!confirm(`Reset the password for ${user.name}? Their current password stops working immediately and they'll be signed out everywhere.`)) return;
     setError(null);
@@ -189,9 +221,11 @@ export function AdminUsers() {
 
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-900">Admin — Users</h1>
-        <button onClick={() => setShowCreate((s) => !s)} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">
-          New User
-        </button>
+        {canManage && (
+          <button onClick={() => setShowCreate((s) => !s)} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">
+            New User
+          </button>
+        )}
       </div>
 
       {tempPassword && (
@@ -246,22 +280,50 @@ export function AdminUsers() {
             <tbody className="divide-y divide-slate-100">
               {users.map((u) => (
                 <tr key={u.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-2 font-medium text-slate-900">{u.name}</td>
+                  <td className="px-4 py-2 font-medium text-slate-900">
+                    <span className={u.deactivatedAt ? "text-slate-400 line-through" : undefined}>{u.name}</span>
+                    {u.deactivatedAt && (
+                      <span className="ml-2 rounded-sm bg-slate-200 px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600">Off</span>
+                    )}
+                  </td>
                   <td className="px-4 py-2 text-slate-600">{u.email}</td>
-                  <td className="px-4 py-2 text-slate-600">{u.role}</td>
+                  <td className="px-4 py-2 text-slate-600">
+                    {canManage ? (
+                      <select
+                        value={u.role}
+                        onChange={(e) => handleRoleChange(u, e.target.value as Role)}
+                        className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700"
+                      >
+                        {(Object.keys(ROLE_LABELS) as Role[]).map((r) => (
+                          <option key={r} value={r}>
+                            {ROLE_LABELS[r]}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      ROLE_LABELS[u.role]
+                    )}
+                  </td>
                   <td className="px-4 py-2 text-slate-600">{u.projectCount}</td>
                   <td className="whitespace-nowrap px-4 py-2 text-slate-600">{new Date(u.createdAt).toLocaleDateString()}</td>
                   <td className="whitespace-nowrap px-4 py-2 text-right">
-                    <button onClick={() => setEditingUser(u)} className="mr-3 text-xs font-medium text-indigo-600 hover:underline">
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleResetPassword(u)}
-                      disabled={resettingId === u.id}
-                      className="mr-3 text-xs font-medium text-amber-700 hover:underline disabled:opacity-50"
-                    >
-                      {resettingId === u.id ? "Resetting…" : "Reset password"}
-                    </button>
+                    {canManage && (
+                      <>
+                        <button onClick={() => setEditingUser(u)} className="mr-3 text-xs font-medium text-indigo-600 hover:underline">
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleResetPassword(u)}
+                          disabled={resettingId === u.id}
+                          className="mr-3 text-xs font-medium text-amber-700 hover:underline disabled:opacity-50"
+                        >
+                          {resettingId === u.id ? "Resetting…" : "Reset password"}
+                        </button>
+                        <button onClick={() => handleToggleActive(u)} className="mr-3 text-xs font-medium text-slate-600 hover:underline">
+                          {u.deactivatedAt ? "Reactivate" : "Deactivate"}
+                        </button>
+                      </>
+                    )}
                     <Link to={`/admin/users/${u.id}/dashboard`} className="text-xs font-medium text-indigo-600 hover:underline">
                       View →
                     </Link>

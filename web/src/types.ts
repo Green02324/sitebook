@@ -1,4 +1,10 @@
-export type Role = "ADMIN" | "USER";
+export type Role = "ADMIN" | "ADMIN_READONLY" | "USER";
+
+export const ROLE_LABELS: Record<Role, string> = {
+  ADMIN: "Admin",
+  ADMIN_READONLY: "Admin (read-only)",
+  USER: "User",
+};
 export type ProjectStatus = "PLANNING" | "ACTIVE" | "COMPLETED";
 export type TransactionType = "DEBIT" | "CREDIT";
 export type TransactionMode = "ESTIMATE" | "ACTUAL";
@@ -10,6 +16,8 @@ export interface User {
   avatarUrl: string | null;
   role: Role;
   createdAt: string;
+  // Set when the account has been switched off; its data is untouched.
+  deactivatedAt: string | null;
 }
 
 export interface UserWithProjectCount extends User {

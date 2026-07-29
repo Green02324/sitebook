@@ -28,6 +28,12 @@ router.post(
       res.status(401).json({ error: "Invalid email or password" });
       return;
     }
+    // Checked after the password so a wrong guess can't be used to discover
+    // which accounts exist and have been switched off.
+    if (user.deactivatedAt) {
+      res.status(403).json({ error: "This account has been deactivated" });
+      return;
+    }
     const accessToken = signAccessToken(user);
     const refreshToken = await issueRefreshToken(user.id);
     res.cookie(REFRESH_COOKIE, refreshToken, REFRESH_COOKIE_OPTS);
