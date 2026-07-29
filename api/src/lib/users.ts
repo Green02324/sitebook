@@ -7,6 +7,12 @@ export function generateTempPassword(): string {
   return crypto.randomBytes(9).toString("base64url");
 }
 
+// Handed to every new account so it can simply be told to the person, rather
+// than relayed. It is deliberately guessable, so it is only safe for as long
+// as it takes them to set their own — anyone who knows the convention can
+// sign in until they do.
+export const DEFAULT_NEW_USER_PASSWORD = "12341234";
+
 function nameFromEmail(email: string): string {
   const local = email.split("@")[0];
   return local.charAt(0).toUpperCase() + local.slice(1);
@@ -62,7 +68,7 @@ export async function ensureOwnerUser(): Promise<User> {
 // Admin-only "add a contractor" flow — there's no public signup, so this is
 // the only way a new USER account gets created after bootstrap.
 export async function createUserByAdmin(email: string, name: string): Promise<{ user: User; tempPassword: string }> {
-  const tempPassword = generateTempPassword();
+  const tempPassword = DEFAULT_NEW_USER_PASSWORD;
   const passwordHash = await bcrypt.hash(tempPassword, 10);
   const user = await prisma.user.create({ data: { email, name, passwordHash, role: "USER" } });
   return { user, tempPassword };

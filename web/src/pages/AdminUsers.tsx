@@ -235,7 +235,11 @@ export function AdminUsers() {
               {tempPassword.kind === "created" ? "Created" : "Reset password for"} <strong>{tempPassword.email}</strong>. Temporary password:{" "}
               <code className="rounded bg-amber-100 px-1.5 py-0.5">{tempPassword.password}</code>
             </span>
-            <span className="text-xs text-amber-800">Copy it now — it is hashed on save and can't be shown again.</span>
+            <span className="text-xs text-amber-800">
+              {tempPassword.kind === "created"
+                ? "This is the standard starting password. Have them change it on the Profile page as soon as they sign in — until they do, anyone who knows it can get into this account."
+                : "Copy it now — it is hashed on save and can't be shown again."}
+            </span>
           </div>
           <button onClick={() => setTempPassword(null)} className="shrink-0 font-medium underline">
             Dismiss
