@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useView, withViewParams } from "../context/ViewContext";
 import { useIsMobile } from "../lib/useIsMobile";
-import { OVERHEAD_LABEL } from "../lib/labels";
+import { HOURS_LABEL, OVERHEAD_LABEL } from "../lib/labels";
 import { api } from "../api";
 import type { Project } from "../types";
 
@@ -80,6 +80,9 @@ function NavContent({
         <ProjectsNavList onNavigate={onNavigate} />
         <NavLink to={`${prefix}/overhead`} className={linkClass} onClick={onNavigate}>
           {OVERHEAD_LABEL}
+        </NavLink>
+        <NavLink to={`${prefix}/consulting`} className={linkClass} onClick={onNavigate}>
+          {HOURS_LABEL}
         </NavLink>
         <NavLink to={`${prefix}/annual-report`} className={linkClass} onClick={onNavigate}>
           Annual Report

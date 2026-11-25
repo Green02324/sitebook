@@ -48,6 +48,10 @@ model User {
   refreshTokens     RefreshToken[]
   overheadCategories OverheadCategory[]
   overheadExpenses  OverheadExpense[]
+  // Fallback hourly rate for consulting engagements that don't set their own.
+  // Null means no rate: hours are still tracked, just without a dollar value.
+  consultingRateCents Int?
+  consultingEngagements ConsultingEngagement[]
 }
 
 // Refresh-token rotation: each row is one issued refresh token. On every
@@ -157,4 +161,77 @@ model OverheadExpense {
 
   @@index([userId, date])
   @@index([categoryId])
+}
+
+// Consulting time tracking: a user billing hours (not materials) on someone
+// else's project. Entirely separate from Project/Transaction — these never
+// feed the dashboard, annual report, or any job's profit figures.
+model ConsultingEngagement {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  clientName  String?
+  // Where the "send" button addresses the email; optional.
+  clientEmail String?
+  // Hourly rate in cents. Null falls back to the account's default rate.
+  rateCents   Int?
+  notes       String?
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  bills       ConsultingBill[]
+  entries     ConsultingEntry[]
+  payments    ConsultingPayment[]
+
+  @@index([userId, createdAt])
+}
+
+// "Bill 1", "Bill 2"... — a batch of hours. New hours land on the highest
+// numbered bill that is still open; closing one (by hand, or by recording a
+// payment) makes the next entry start the next bill.
+model ConsultingBill {
+  id           String               @id @default(cuid())
+  engagementId String
+  engagement   ConsultingEngagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  number       Int
+  closedAt     DateTime?
+  createdAt    DateTime             @default(now())
+  entries      ConsultingEntry[]
+
+  @@unique([engagementId, number])
+}
+
+model ConsultingEntry {
+  id           String               @id @default(cuid())
+  engagementId String
+  engagement   ConsultingEngagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  billId       String
+  bill         ConsultingBill       @relation(fields: [billId], references: [id], onDelete: Cascade)
+  date         DateTime             @db.Date
+  // Whole minutes, so quarter-hours and the like sum exactly.
+  minutes      Int
+  summary      String?
+  // Null floats with the engagement's current rate. Set when the bill closes,
+  // so a bill that's been sent doesn't change total if the rate later does.
+  rateCents    Int?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@index([engagementId, date])
+  @@index([billId])
+}
+
+// Money received. Not tied to a single bill: payments are applied to the
+// oldest hours first, so one check can clear a bill and carry on into the next.
+model ConsultingPayment {
+  id           String               @id @default(cuid())
+  engagementId String
+  engagement   ConsultingEngagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  date         DateTime             @db.Date
+  amountCents  Int
+  note         String?
+  createdAt    DateTime             @default(now())
+
+  @@index([engagementId, date])
 }

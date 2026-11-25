@@ -1,0 +1,420 @@
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { api, fetchBlob } from "../api";
+import { useView, withViewParams } from "../context/ViewContext";
+import { BackLink } from "../components/BackLink";
+import { PaidBadge } from "../components/PaidBadge";
+import {
+  EngagementModal,
+  LogHoursModal,
+  PaymentModal,
+  type EngagementFormData,
+  type LogHoursData,
+  type PaymentFormData,
+} from "../components/ConsultingModals";
+import { formatCents } from "../lib/money";
+import { formatDay, formatHours, slugify } from "../lib/consulting";
+import type { ConsultingBill, ConsultingEngagementDetail, ConsultingEntry, ConsultingPayment } from "../types";
+
+const smallBtn = "rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50";
+
+function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <div className="text-xs text-slate-500">{label}</div>
+      <div className={`mt-0.5 text-base font-semibold ${tone ?? "text-slate-900"}`}>{value}</div>
+    </div>
+  );
+}
+
+export function ConsultingDetailPage() {
+  const { engagementId } = useParams<{ engagementId: string }>();
+  const view = useView();
+  const navigate = useNavigate();
+  const [data, setData] = useState<ConsultingEngagementDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [logging, setLogging] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<ConsultingEntry | null>(null);
+  const [paying, setPaying] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<ConsultingPayment | null>(null);
+  const [editingEngagement, setEditingEngagement] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const base = `/consulting/engagements/${engagementId}`;
+  const prefix = view.readOnly ? `/admin/users/${view.targetUserId}` : "";
+
+  function load() {
+    api
+      .get<ConsultingEngagementDetail>(withViewParams(base, view))
+      .then(setData)
+      .catch((err) => setError((err as Error).message));
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(load, [engagementId, view.targetUserId, view.readOnly]);
+
+  // Every write returns the refreshed engagement, so the screen just swaps it in.
+  async function mutate<T extends ConsultingEngagementDetail | void>(fn: () => Promise<T>) {
+    setActionError(null);
+    try {
+      const result = await fn();
+      if (result) setData(result as ConsultingEngagementDetail);
+    } catch (err) {
+      setActionError((err as Error).message);
+    }
+  }
+
+  if (error) return <div className="text-sm text-rose-600">{error}</div>;
+  if (!data) return <div className="text-sm text-slate-500">Loading…</div>;
+
+  const s = data.summary;
+  const rate = data.effectiveRateCents;
+  const bills = [...s.bills].sort((a, b) => b.number - a.number);
+  const hasOpenHours = s.bills.some((b) => !b.closed && b.entries.length > 0);
+
+  function pdfPath(billId?: string) {
+    return withViewParams(`${base}/pdf${billId ? `?billId=${billId}` : ""}`, view);
+  }
+
+  function pdfName(bill?: ConsultingBill) {
+    return `${slugify(data!.name)}-${bill ? `bill-${bill.number}` : "time-log"}.pdf`;
+  }
+
+  async function openPdf(bill?: ConsultingBill) {
+    // Open the tab straight from the tap so the browser doesn't treat it as a popup.
+    const pdfWindow = window.open("", "_blank");
+    setBusy(bill?.id ?? "all");
+    try {
+      const blob = await fetchBlob(pdfPath(bill?.id));
+      const url = URL.createObjectURL(blob);
+      if (pdfWindow) pdfWindow.location.href = url;
+      else window.location.href = url;
+    } catch (err) {
+      pdfWindow?.close();
+      setActionError((err as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // The phone's share sheet lets Dan send the PDF straight to Mail, Messages,
+  // Drive, etc. Where the browser can't share files, fall back to just opening it.
+  async function sharePdf(bill?: ConsultingBill) {
+    setBusy(bill?.id ?? "all");
+    setActionError(null);
+    try {
+      const blob = await fetchBlob(pdfPath(bill?.id));
+      const file = new File([blob], pdfName(bill), { type: "application/pdf" });
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: `${data!.name}${bill ? ` – Bill ${bill.number}` : ""}` });
+          return;
+        } catch (err) {
+          if ((err as DOMException).name === "AbortError") return; // user closed the sheet
+        }
+      }
+      window.open(URL.createObjectURL(blob), "_blank");
+    } catch (err) {
+      setActionError((err as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function emailLink(bill?: ConsultingBill): string {
+    const subject = `${data!.name} – ${bill ? `Bill ${bill.number}` : "Time log"}`;
+    const minutes = bill ? bill.minutes : s.totalMinutes;
+    const amount = bill ? bill.amountCents : s.billableCents;
+    const lines = [
+      `Hello${data!.clientName ? ` ${data!.clientName}` : ""},`,
+      "",
+      `${bill ? `Bill ${bill.number}` : "My time log"} for ${data!.name}: ${formatHours(minutes)}${rate ? ` — ${formatCents(amount)}` : ""}.`,
+      "",
+      "(Please see the attached PDF for the detail.)",
+    ];
+    return `mailto:${data!.clientEmail ?? ""}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join("\n"))}`;
+  }
+
+  const canShareFiles = typeof navigator !== "undefined" && typeof navigator.share === "function";
+
+  function ExportButtons({ bill }: { bill?: ConsultingBill }) {
+    const id = bill?.id ?? "all";
+    return (
+      <div className="flex flex-wrap gap-2">
+        <button className={smallBtn} disabled={busy === id} onClick={() => openPdf(bill)}>
+          {busy === id ? "Preparing…" : "View PDF"}
+        </button>
+        {canShareFiles && (
+          <button className={smallBtn} disabled={busy === id} onClick={() => sharePdf(bill)}>
+            Share
+          </button>
+        )}
+        <a className={smallBtn} href={emailLink(bill)}>
+          Email
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div>
+        <BackLink to={`${prefix}/consulting`} label="Hours Tracking" />
+      </div>
+
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-slate-900">{data.name}</h1>
+          <div className="text-sm text-slate-500">
+            {data.clientName && <span>{data.clientName} · </span>}
+            {rate ? `${formatCents(rate)}/hr${data.rateCents == null ? " (default rate)" : ""}` : "No hourly rate set"}
+            {data.archivedAt && " · Archived"}
+          </div>
+        </div>
+        {!view.readOnly && (
+          <div className="flex gap-2">
+            <button className={smallBtn} onClick={() => setEditingEngagement(true)}>
+              Edit
+            </button>
+            <button onClick={() => setLogging(true)} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">
+              Log hours
+            </button>
+          </div>
+        )}
+      </div>
+
+      {actionError && <div className="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{actionError}</div>}
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Stat label="Unpaid hours" value={formatHours(s.unpaidMinutes)} tone="text-amber-700" />
+        <Stat label="Balance due" value={rate ? formatCents(s.balanceCents) : "—"} tone={s.balanceCents > 0 ? "text-amber-700" : "text-emerald-700"} />
+        <Stat label="Total hours" value={formatHours(s.totalMinutes)} />
+        <Stat label="Total billable" value={rate ? formatCents(s.billableCents) : "—"} />
+        <Stat label="Paid so far" value={formatCents(s.paidCents)} tone="text-emerald-700" />
+        {s.creditCents > 0 && <Stat label="Credit (overpaid)" value={formatCents(s.creditCents)} tone="text-emerald-700" />}
+      </div>
+
+      {s.unratedMinutes > 0 && (
+        <div className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {formatHours(s.unratedMinutes)} have no hourly rate, so no dollar amount yet.
+          {!view.readOnly && " Set a rate on this engagement (Edit) or a default rate in Profile."}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold text-slate-900">Bills</h2>
+        <ExportButtons />
+      </div>
+
+      {bills.length === 0 && (
+        <div className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">
+          No hours logged yet.
+        </div>
+      )}
+
+      {bills.map((b) => (
+        <div key={b.id} className="rounded-lg border border-slate-200 bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-slate-900">Bill {b.number}</span>
+              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${b.closed ? "bg-sky-100 text-sky-800" : "bg-indigo-100 text-indigo-800"}`}>
+                {b.closed ? "Sent" : "Open"}
+              </span>
+              {b.entries.length > 0 && <PaidBadge status={b.status} />}
+            </div>
+            <div className="text-right text-sm">
+              <span className="font-semibold text-slate-900">{formatHours(b.minutes)}</span>
+              {rate && <span className="text-slate-500"> · {formatCents(b.amountCents)}</span>}
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-100">
+            {b.entries.map((e) => (
+              <div key={e.id} className="px-4 py-3">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-sm font-medium text-slate-800">{formatDay(e.date)}</span>
+                  <span className="text-sm text-slate-700">
+                    {formatHours(e.minutes)}
+                    {e.rateCents != null && <span className="text-slate-500"> · {formatCents(e.amountCents)}</span>}
+                  </span>
+                </div>
+                {e.summary && <div className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{e.summary}</div>}
+                <div className="mt-1 flex items-center justify-between">
+                  {e.status !== "UNPAID" ? <PaidBadge status={e.status} /> : <span />}
+                  {!view.readOnly && (
+                    <span className="flex gap-3 text-xs font-medium">
+                      <button onClick={() => setEditingEntry(e)} className="text-indigo-600 hover:underline">
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm("Delete this entry?")) mutate(() => api.delete<ConsultingEngagementDetail>(`${base}/entries/${e.id}`));
+                        }}
+                        className="text-rose-600 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+            {b.entries.length === 0 && <div className="px-4 py-3 text-sm text-slate-500">No hours on this bill.</div>}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-3">
+            {b.entries.length > 0 ? <ExportButtons bill={b} /> : <span />}
+            {!view.readOnly && (
+              <div className="flex gap-2">
+                {b.entries.length === 0 && (
+                  <button
+                    className={smallBtn}
+                    onClick={() => mutate(() => api.delete<ConsultingEngagementDetail>(`${base}/bills/${b.id}`))}
+                  >
+                    Remove bill
+                  </button>
+                )}
+                {b.entries.length > 0 && (
+                  <button
+                    className={smallBtn}
+                    onClick={() => mutate(() => api.put<ConsultingEngagementDetail>(`${base}/bills/${b.id}`, { closed: !b.closed }))}
+                  >
+                    {b.closed ? "Reopen bill" : "Mark as sent"}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold text-slate-900">Payments</h2>
+        {!view.readOnly && (
+          <button onClick={() => setPaying(true)} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white">
+            Record payment
+          </button>
+        )}
+      </div>
+      <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
+        {data.payments.map((p) => (
+          <div key={p.id} className="flex items-center justify-between gap-3 px-4 py-3">
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-slate-800">{formatDay(p.date)}</div>
+              {p.note && <div className="truncate text-xs text-slate-500">{p.note}</div>}
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold text-emerald-700">{formatCents(p.amountCents)}</span>
+              {!view.readOnly && (
+                <span className="flex gap-3 text-xs font-medium">
+                  <button onClick={() => setEditingPayment(p)} className="text-indigo-600 hover:underline">
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm("Delete this payment?")) mutate(() => api.delete<ConsultingEngagementDetail>(`${base}/payments/${p.id}`));
+                    }}
+                    className="text-rose-600 hover:underline"
+                  >
+                    Delete
+                  </button>
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+        {data.payments.length === 0 && <div className="px-4 py-6 text-center text-sm text-slate-500">No payments recorded yet.</div>}
+      </div>
+
+      {logging && (
+        <LogHoursModal
+          engagements={[{ id: data.id, name: data.name }]}
+          initialEngagementId={data.id}
+          onClose={() => setLogging(false)}
+          onSubmit={async (d: LogHoursData) => {
+            const next = await api.post<ConsultingEngagementDetail>(`${base}/entries`, { date: d.date, hours: d.hours, summary: d.summary });
+            setData(next);
+          }}
+        />
+      )}
+      {editingEntry && (
+        <LogHoursModal
+          engagements={[{ id: data.id, name: data.name }]}
+          initialEngagementId={data.id}
+          entry={editingEntry}
+          bills={bills}
+          onClose={() => setEditingEntry(null)}
+          onSubmit={async (d: LogHoursData) => {
+            const next = await api.put<ConsultingEngagementDetail>(`${base}/entries/${editingEntry.id}`, {
+              date: d.date,
+              hours: d.hours,
+              summary: d.summary,
+              billId: d.billId,
+            });
+            setData(next);
+          }}
+        />
+      )}
+      {paying && (
+        <PaymentModal
+          balanceCents={s.balanceCents}
+          canCloseBill={hasOpenHours}
+          onClose={() => setPaying(false)}
+          onSubmit={async (d: PaymentFormData) => {
+            const next = await api.post<ConsultingEngagementDetail>(`${base}/payments`, d);
+            setData(next);
+          }}
+        />
+      )}
+      {editingPayment && (
+        <PaymentModal
+          initial={editingPayment}
+          balanceCents={s.balanceCents}
+          canCloseBill={false}
+          onClose={() => setEditingPayment(null)}
+          onSubmit={async (d: PaymentFormData) => {
+            const next = await api.put<ConsultingEngagementDetail>(`${base}/payments/${editingPayment.id}`, {
+              date: d.date,
+              amountCents: d.amountCents,
+              note: d.note,
+            });
+            setData(next);
+          }}
+        />
+      )}
+      {editingEngagement && (
+        <>
+          <EngagementModal
+            initial={data}
+            defaultRateCents={data.defaultRateCents}
+            onClose={() => setEditingEngagement(false)}
+            onSubmit={async (d: EngagementFormData) => {
+              const next = await api.put<ConsultingEngagementDetail>(base, d);
+              setData(next);
+            }}
+          />
+        </>
+      )}
+
+      {!view.readOnly && (
+        <div className="flex flex-wrap gap-3 border-t border-slate-200 pt-4 text-sm">
+          <button
+            className="font-medium text-slate-600 hover:underline"
+            onClick={() => mutate(() => api.put<ConsultingEngagementDetail>(base, { archived: !data.archivedAt }))}
+          >
+            {data.archivedAt ? "Unarchive engagement" : "Archive engagement"}
+          </button>
+          <button
+            className="font-medium text-rose-600 hover:underline"
+            onClick={async () => {
+              if (!confirm(`Delete "${data.name}" and ALL of its hours, bills and payments? This cannot be undone.`)) return;
+              await api.delete(base);
+              navigate("/consulting");
+            }}
+          >
+            Delete engagement
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

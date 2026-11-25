@@ -21,7 +21,7 @@ declare module "express-serve-static-core" {
 
 export class AuthError extends Error {}
 
-export type SafeUser = Pick<User, "id" | "email" | "name" | "avatarUrl" | "role" | "createdAt" | "deactivatedAt">;
+export type SafeUser = Pick<User, "id" | "email" | "name" | "avatarUrl" | "role" | "createdAt" | "deactivatedAt" | "consultingRateCents">;
 
 export function toSafeUser(user: User): SafeUser {
   return {
@@ -32,6 +32,7 @@ export function toSafeUser(user: User): SafeUser {
     role: user.role,
     createdAt: user.createdAt,
     deactivatedAt: user.deactivatedAt,
+    consultingRateCents: user.consultingRateCents,
   };
 }
 

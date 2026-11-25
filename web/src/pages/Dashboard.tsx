@@ -6,8 +6,9 @@ import { DonutChart, type DonutDetail, type DonutExpenseSlice } from "../compone
 import { YearSelector } from "../components/YearSelector";
 import { ProjectStatusBadge } from "../components/ProjectStatusBadge";
 import { formatCents } from "../lib/money";
-import { OVERHEAD_LABEL } from "../lib/labels";
-import type { DashboardBreakdown, DashboardResponse } from "../types";
+import { HOURS_LABEL, OVERHEAD_LABEL } from "../lib/labels";
+import { formatHours } from "../lib/consulting";
+import type { ConsultingEngagementHeadline, DashboardBreakdown, DashboardResponse } from "../types";
 
 function basePath(readOnly: boolean, targetUserId: string): string {
   return readOnly ? `/admin/users/${targetUserId}` : "";
@@ -23,6 +24,17 @@ export function Dashboard() {
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [engagements, setEngagements] = useState<ConsultingEngagementHeadline[]>([]);
+
+  // Consulting hours are not tied to a year or to any project figures, so they
+  // load on their own and never touch the donut or the profit totals.
+  useEffect(() => {
+    api
+      .get<ConsultingEngagementHeadline[]>(withViewParams("/consulting/engagements", view))
+      .then(setEngagements)
+      .catch(() => setEngagements([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.targetUserId, view.readOnly]);
 
   useEffect(() => {
     setLoading(true);
@@ -86,6 +98,37 @@ export function Dashboard() {
           {data.projects.length === 0 && <div className="px-4 py-6 text-center text-sm text-slate-500">No projects yet.</div>}
         </div>
       </div>
+
+      {(engagements.some((e) => !e.archivedAt) || !view.readOnly) && (
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">{HOURS_LABEL}</h2>
+            <Link to={`${prefix}/consulting`} className="text-sm font-medium text-indigo-600 hover:underline">
+              View all
+            </Link>
+          </div>
+          <div className="flex flex-col divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
+            {engagements
+              .filter((e) => !e.archivedAt)
+              .map((e) => (
+                <Link key={e.id} to={`${prefix}/consulting/${e.id}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium text-slate-900">{e.name}</div>
+                    <div className="text-xs text-slate-500">{formatHours(e.unpaidMinutes)} unpaid</div>
+                  </div>
+                  <span className={`text-sm font-semibold ${e.balanceCents > 0 ? "text-amber-700" : "text-emerald-700"}`}>
+                    {e.effectiveRateCents ? formatCents(e.balanceCents) : "—"}
+                  </span>
+                </Link>
+              ))}
+            {engagements.filter((e) => !e.archivedAt).length === 0 && (
+              <Link to={`${prefix}/consulting`} className="px-4 py-6 text-center text-sm text-slate-500 hover:bg-slate-50">
+                No consulting engagements yet — tap to start tracking hours.
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

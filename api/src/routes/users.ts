@@ -25,8 +25,20 @@ router.get(
 router.put(
   "/me",
   ah(async (req, res) => {
-    const { name, email, avatarUrl } = req.body as { name?: string; email?: string; avatarUrl?: string | null };
-    const data: { name?: string; email?: string; avatarUrl?: string | null } = {};
+    const { name, email, avatarUrl, consultingRateCents } = req.body as {
+      name?: string;
+      email?: string;
+      avatarUrl?: string | null;
+      consultingRateCents?: number | null;
+    };
+    const data: { name?: string; email?: string; avatarUrl?: string | null; consultingRateCents?: number | null } = {};
+    if (consultingRateCents !== undefined) {
+      if (consultingRateCents !== null && (!Number.isInteger(consultingRateCents) || consultingRateCents <= 0)) {
+        res.status(400).json({ error: "Rate must be a positive amount" });
+        return;
+      }
+      data.consultingRateCents = consultingRateCents;
+    }
     if (name !== undefined) data.name = name;
     if (avatarUrl !== undefined) data.avatarUrl = avatarUrl;
     if (email !== undefined) {

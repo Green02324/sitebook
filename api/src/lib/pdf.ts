@@ -286,6 +286,66 @@ class PdfBuilder {
     this.page.drawText(text, { x: drawX, y: this.y, size, font: f, color: bold ? INK : rgb(0.2, 0.2, 0.2) });
   }
 
+  // One time-log entry: date, hours, rate and amount on the first line, then
+  // the work summary wrapped underneath in full. A bill is read by the person
+  // paying it, so unlike the table cells nothing here is ever truncated.
+  logEntry(cells: { date: string; hours: string; rate: string; amount: string }, summary: string | null) {
+    this.ensureSpace(MARGIN + 36);
+    const cols = [
+      { text: cells.date, x: MARGIN, align: "left" as const },
+      { text: cells.hours, x: MARGIN + 100, align: "left" as const },
+      { text: cells.rate, x: MARGIN + 200, align: "left" as const },
+      { text: cells.amount, x: PAGE_SIZE[0] - MARGIN, align: "right" as const },
+    ];
+    for (const c of cols) {
+      const text = this.safe(c.text);
+      const x = c.align === "right" ? c.x - this.bold.widthOfTextAtSize(text, 10) : c.x;
+      this.page.drawText(text, { x, y: this.y, size: 10, font: this.bold, color: INK });
+    }
+    this.y -= 14;
+
+    const body = this.safe(summary ?? "").trim();
+    if (body) {
+      for (const line of this.wrap(body, PAGE_SIZE[0] - MARGIN * 2 - 12, 9.5)) {
+        this.ensureSpace();
+        this.page.drawText(line, { x: MARGIN + 12, y: this.y, size: 9.5, font: this.font, color: rgb(0.25, 0.25, 0.25) });
+        this.y -= 12.5;
+      }
+    }
+    this.y -= 7;
+  }
+
+  private wrap(text: string, maxWidth: number, size: number): string[] {
+    const lines: string[] = [];
+    let current = "";
+    for (const word of text.split(/\s+/)) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (this.font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+        current = candidate;
+        continue;
+      }
+      if (current) lines.push(current);
+      // A single token wider than the line (a long URL) gets hard-split
+      // rather than running off the page.
+      let rest = word;
+      while (this.font.widthOfTextAtSize(rest, size) > maxWidth) {
+        let cut = rest.length - 1;
+        while (cut > 1 && this.font.widthOfTextAtSize(rest.slice(0, cut), size) > maxWidth) cut--;
+        lines.push(rest.slice(0, cut));
+        rest = rest.slice(cut);
+      }
+      current = rest;
+    }
+    if (current) lines.push(current);
+    return lines;
+  }
+
+  rule() {
+    this.ensureSpace();
+    this.page.drawLine({ start: { x: MARGIN, y: this.y + 4 }, end: { x: PAGE_SIZE[0] - MARGIN, y: this.y + 4 }, thickness: 0.5, color: RULE });
+    this.y -= 6;
+  }
+
   save(): Promise<Uint8Array> {
     return this.doc.save();
   }
@@ -569,6 +629,101 @@ export async function buildAnnualLedgerPdf(data: AnnualLedgerData): Promise<Uint
   b.row("Total Credits", formatCents(data.totalCredits), { bold: true });
   b.row("Total Debits", formatCents(data.totalDebits), { bold: true });
   b.row("Net Profit", formatCents(data.netCents), { bold: true });
+
+  return b.save();
+}
+
+export interface ConsultingPdfEntry {
+  date: string;
+  minutes: number;
+  rateCents: number | null;
+  amountCents: number;
+  summary: string | null;
+}
+
+export interface ConsultingPdfSection {
+  title: string;
+  entries: ConsultingPdfEntry[];
+  minutes: number;
+  amountCents: number;
+}
+
+export interface ConsultingPdfData {
+  consultantName: string;
+  engagementName: string;
+  clientName: string | null;
+  // "Bill 2", or "Complete time log" when every bill is printed together.
+  scopeLabel: string;
+  generatedAt: string;
+  sections: ConsultingPdfSection[];
+  totalMinutes: number;
+  totalCents: number;
+  // How much of the printed hours payments have already covered.
+  paidCents: number;
+  balanceCents: number;
+  // Listed only on the complete log, where the whole payment history is shown.
+  payments?: { date: string; amountCents: number; note: string | null }[];
+  // True when any hours lack a rate, so the totals are understood as partial.
+  hasUnrated: boolean;
+}
+
+function formatHours(minutes: number): string {
+  return `${(minutes / 60).toFixed(2)} hrs`;
+}
+
+export async function buildConsultingPdf(data: ConsultingPdfData): Promise<Uint8Array> {
+  const b = await PdfBuilder.create();
+
+  b.heading(data.engagementName);
+  b.text(data.scopeLabel, { size: 12, color: INK });
+  if (data.clientName) b.text(`Client: ${data.clientName}`);
+  b.text(`Consultant: ${data.consultantName}`);
+  b.text(`Prepared: ${data.generatedAt}`);
+  b.gap(10);
+
+  for (const section of data.sections) {
+    b.subheading(section.title);
+    if (section.entries.length === 0) {
+      b.text("No hours logged.", { size: 10 });
+    }
+    for (const e of section.entries) {
+      b.logEntry(
+        {
+          date: e.date,
+          hours: formatHours(e.minutes),
+          rate: e.rateCents === null ? "—" : `${formatCents(e.rateCents)}/hr`,
+          amount: e.rateCents === null ? "—" : formatCents(e.amountCents),
+        },
+        e.summary,
+      );
+    }
+    b.rule();
+    b.row(`${section.title} total — ${formatHours(section.minutes)}`, formatCents(section.amountCents), { bold: true });
+    b.gap(8);
+  }
+
+  b.gap(6);
+  b.row("Total hours", formatHours(data.totalMinutes), { bold: true });
+  b.row("Total amount", formatCents(data.totalCents), { bold: true });
+  if (data.paidCents > 0) b.row("Payments received", `(${formatCents(data.paidCents)})`);
+  b.row("Balance due", formatCents(data.balanceCents), { bold: true });
+  if (data.hasUnrated) {
+    b.gap(4);
+    b.text("Some hours have no hourly rate set and are not included in the amounts above.", { size: 9 });
+  }
+
+  if (data.payments && data.payments.length > 0) {
+    b.gap(14);
+    b.subheading("Payments");
+    b.table(
+      [
+        { label: "Date", width: 90 },
+        { label: "Note", width: 322 },
+        { label: "Amount", width: 100, align: "right" },
+      ],
+      data.payments.map((p) => [p.date, p.note ?? "", formatCents(p.amountCents)]),
+    );
+  }
 
   return b.save();
 }

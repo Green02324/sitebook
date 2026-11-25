@@ -17,6 +17,8 @@ import { Profile } from "./pages/Profile";
 import { AdminUsers } from "./pages/AdminUsers";
 import { OverheadPage } from "./pages/OverheadPage";
 import { AnnualReportPage } from "./pages/AnnualReportPage";
+import { ConsultingPage } from "./pages/ConsultingPage";
+import { ConsultingDetailPage } from "./pages/ConsultingDetailPage";
 import { api } from "./api";
 import type { User } from "./types";
 
@@ -70,6 +72,8 @@ function App() {
             <Route path="/projects/:projectId/report" element={<ReportPage />} />
             <Route path="/overhead" element={<OverheadPage />} />
             <Route path="/annual-report" element={<AnnualReportPage />} />
+            <Route path="/consulting" element={<ConsultingPage />} />
+            <Route path="/consulting/:engagementId" element={<ConsultingDetailPage />} />
             <Route path="/profile" element={<Profile />} />
 
             <Route
@@ -104,6 +108,8 @@ function App() {
             <Route path="projects/:projectId/report" element={<ReportPage />} />
             <Route path="overhead" element={<OverheadPage />} />
             <Route path="annual-report" element={<AnnualReportPage />} />
+            <Route path="consulting" element={<ConsultingPage />} />
+            <Route path="consulting/:engagementId" element={<ConsultingDetailPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

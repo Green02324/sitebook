@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../api";
 import { BackLink } from "../components/BackLink";
+import { centsToInputValue, toCents } from "../lib/money";
 import type { User } from "../types";
 
 export function Profile() {
@@ -12,6 +13,11 @@ export function Profile() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
+
+  const [rate, setRate] = useState(user?.consultingRateCents != null ? centsToInputValue(user.consultingRateCents) : "");
+  const [savingRate, setSavingRate] = useState(false);
+  const [rateMessage, setRateMessage] = useState<string | null>(null);
+  const [rateError, setRateError] = useState<string | null>(null);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -31,6 +37,31 @@ export function Profile() {
       setProfileError((err as Error).message);
     } finally {
       setSavingProfile(false);
+    }
+  }
+
+  async function handleRateSubmit(e: FormEvent) {
+    e.preventDefault();
+    setRateError(null);
+    setRateMessage(null);
+    let consultingRateCents: number | null = null;
+    if (rate.trim() !== "") {
+      try {
+        consultingRateCents = toCents(rate);
+        if (consultingRateCents <= 0) throw new Error("Rate must be greater than zero");
+      } catch (err) {
+        setRateError((err as Error).message);
+        return;
+      }
+    }
+    setSavingRate(true);
+    try {
+      await api.put<User>("/users/me", { consultingRateCents });
+      setRateMessage(consultingRateCents === null ? "Default rate cleared." : "Default rate saved.");
+    } catch (err) {
+      setRateError((err as Error).message);
+    } finally {
+      setSavingRate(false);
     }
   }
 
@@ -99,6 +130,29 @@ export function Profile() {
         {profileMessage && <div className="text-sm text-emerald-600">{profileMessage}</div>}
         <button type="submit" disabled={savingProfile} className="self-start rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50">
           {savingProfile ? "Saving…" : "Save changes"}
+        </button>
+      </form>
+
+      <form className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4" onSubmit={handleRateSubmit}>
+        <h2 className="font-semibold text-slate-900">Hours Tracking</h2>
+        <label className="text-sm font-medium text-slate-700">
+          Default consulting rate (per hour)
+          <input
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min="0.01"
+            value={rate}
+            onChange={(e) => setRate(e.target.value)}
+            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+            placeholder="Optional"
+          />
+          <span className="mt-1 block text-xs font-normal text-slate-500">Used for any engagement that does not have its own rate. Leave blank to track hours without dollar amounts.</span>
+        </label>
+        {rateError && <div className="text-sm text-rose-600">{rateError}</div>}
+        {rateMessage && <div className="text-sm text-emerald-600">{rateMessage}</div>}
+        <button type="submit" disabled={savingRate} className="self-start rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50">
+          {savingRate ? "Saving…" : "Save rate"}
         </button>
       </form>
 

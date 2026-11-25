@@ -7,3 +7,7 @@ export const OVERHEAD_LABEL = "Operating Expenses";
 // Long form for the section heading, where the old name is worth keeping
 // visible while the new one settles in.
 export const OVERHEAD_LABEL_FULL = "Operating Expenses (Overhead)";
+
+// Consulting time tracking. Called "Hours Tracking" everywhere the user sees
+// it; the API route and database tables say "consulting".
+export const HOURS_LABEL = "Hours Tracking";

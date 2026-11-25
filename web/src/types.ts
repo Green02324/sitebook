@@ -18,6 +18,8 @@ export interface User {
   createdAt: string;
   // Set when the account has been switched off; its data is untouched.
   deactivatedAt: string | null;
+  // Fallback hourly rate for consulting engagements without their own.
+  consultingRateCents: number | null;
 }
 
 export interface UserWithProjectCount extends User {
@@ -187,4 +189,75 @@ export interface AnnualLedgerResponse {
   totalCredits: number;
   totalDebits: number;
   netCents: number;
+}
+
+export type PaidStatus = "UNPAID" | "PARTIAL" | "PAID";
+
+export interface ConsultingEntry {
+  id: string;
+  billId: string;
+  date: string;
+  minutes: number;
+  summary: string | null;
+  rateCents: number | null;
+  amountCents: number;
+  paidCents: number;
+  status: PaidStatus;
+}
+
+export interface ConsultingBill {
+  id: string;
+  number: number;
+  closed: boolean;
+  closedAt: string | null;
+  minutes: number;
+  amountCents: number;
+  paidCents: number;
+  status: PaidStatus;
+  entries: ConsultingEntry[];
+}
+
+export interface ConsultingSummary {
+  totalMinutes: number;
+  billableCents: number;
+  paidCents: number;
+  balanceCents: number;
+  creditCents: number;
+  unpaidMinutes: number;
+  unratedMinutes: number;
+  bills: ConsultingBill[];
+}
+
+export interface ConsultingEngagementHeadline {
+  id: string;
+  name: string;
+  clientName: string | null;
+  clientEmail: string | null;
+  rateCents: number | null;
+  effectiveRateCents: number | null;
+  archivedAt: string | null;
+  createdAt: string;
+  openBillNumber: number | null;
+  lastEntryDate: string | null;
+  totalMinutes: number;
+  billableCents: number;
+  paidCents: number;
+  balanceCents: number;
+  creditCents: number;
+  unpaidMinutes: number;
+  unratedMinutes: number;
+}
+
+export interface ConsultingPayment {
+  id: string;
+  date: string;
+  amountCents: number;
+  note: string | null;
+}
+
+export interface ConsultingEngagementDetail extends ConsultingEngagementHeadline {
+  notes: string | null;
+  defaultRateCents: number | null;
+  summary: ConsultingSummary;
+  payments: ConsultingPayment[];
 }
