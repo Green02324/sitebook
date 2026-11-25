@@ -641,9 +641,17 @@ export interface ConsultingPdfEntry {
   summary: string | null;
 }
 
+export interface ConsultingPdfExpense {
+  date: string;
+  category: string;
+  description: string | null;
+  amountCents: number;
+}
+
 export interface ConsultingPdfSection {
   title: string;
   entries: ConsultingPdfEntry[];
+  expenses: ConsultingPdfExpense[];
   minutes: number;
   amountCents: number;
 }
@@ -658,7 +666,8 @@ export interface ConsultingPdfData {
   sections: ConsultingPdfSection[];
   totalMinutes: number;
   totalCents: number;
-  // How much of the printed hours payments have already covered.
+  expenseCents: number;
+  // How much of the printed charges payments have already covered.
   paidCents: number;
   balanceCents: number;
   // Listed only on the complete log, where the whole payment history is shown.
@@ -683,8 +692,8 @@ export async function buildConsultingPdf(data: ConsultingPdfData): Promise<Uint8
 
   for (const section of data.sections) {
     b.subheading(section.title);
-    if (section.entries.length === 0) {
-      b.text("No hours logged.", { size: 10 });
+    if (section.entries.length === 0 && section.expenses.length === 0) {
+      b.text("Nothing logged.", { size: 10 });
     }
     for (const e of section.entries) {
       b.logEntry(
@@ -697,6 +706,9 @@ export async function buildConsultingPdf(data: ConsultingPdfData): Promise<Uint8
         e.summary,
       );
     }
+    for (const x of section.expenses) {
+      b.logEntry({ date: x.date, hours: x.category, rate: "Expense", amount: formatCents(x.amountCents) }, x.description);
+    }
     b.rule();
     b.row(`${section.title} total — ${formatHours(section.minutes)}`, formatCents(section.amountCents), { bold: true });
     b.gap(8);
@@ -704,6 +716,10 @@ export async function buildConsultingPdf(data: ConsultingPdfData): Promise<Uint8
 
   b.gap(6);
   b.row("Total hours", formatHours(data.totalMinutes), { bold: true });
+  if (data.expenseCents > 0) {
+    b.row("Time", formatCents(data.totalCents - data.expenseCents));
+    b.row("Expenses", formatCents(data.expenseCents));
+  }
   b.row("Total amount", formatCents(data.totalCents), { bold: true });
   if (data.paidCents > 0) b.row("Payments received", `(${formatCents(data.paidCents)})`);
   b.row("Balance due", formatCents(data.balanceCents), { bold: true });

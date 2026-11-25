@@ -182,6 +182,7 @@ model ConsultingEngagement {
   updatedAt   DateTime  @updatedAt
   bills       ConsultingBill[]
   entries     ConsultingEntry[]
+  expenses    ConsultingExpense[]
   payments    ConsultingPayment[]
 
   @@index([userId, createdAt])
@@ -198,6 +199,7 @@ model ConsultingBill {
   closedAt     DateTime?
   createdAt    DateTime             @default(now())
   entries      ConsultingEntry[]
+  expenses     ConsultingExpense[]
 
   @@unique([engagementId, number])
 }
@@ -215,6 +217,25 @@ model ConsultingEntry {
   // Null floats with the engagement's current rate. Set when the bill closes,
   // so a bill that's been sent doesn't change total if the rate later does.
   rateCents    Int?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@index([engagementId, date])
+  @@index([billId])
+}
+
+// Costs paid out of pocket (materials, permit fees...) to be billed back. They
+// sit on bills alongside hours and are paid off the same way.
+model ConsultingExpense {
+  id           String               @id @default(cuid())
+  engagementId String
+  engagement   ConsultingEngagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  billId       String
+  bill         ConsultingBill       @relation(fields: [billId], references: [id], onDelete: Cascade)
+  date         DateTime             @db.Date
+  amountCents  Int
+  category     String
+  description  String?
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
 

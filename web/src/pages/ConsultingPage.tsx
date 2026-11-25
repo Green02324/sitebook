@@ -3,7 +3,14 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useView, withViewParams } from "../context/ViewContext";
 import { BackLink } from "../components/BackLink";
-import { EngagementModal, LogHoursModal, type EngagementFormData, type LogHoursData } from "../components/ConsultingModals";
+import {
+  EngagementModal,
+  ExpenseModal,
+  LogHoursModal,
+  type EngagementFormData,
+  type ExpenseFormData,
+  type LogHoursData,
+} from "../components/ConsultingModals";
 import { formatCents } from "../lib/money";
 import { formatDay, formatHours } from "../lib/consulting";
 import { HOURS_LABEL } from "../lib/labels";
@@ -18,6 +25,7 @@ export function ConsultingPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [logging, setLogging] = useState<string | "any" | null>(null);
+  const [expensing, setExpensing] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const prefix = view.readOnly ? `/admin/users/${view.targetUserId}` : "";
 
@@ -40,6 +48,16 @@ export function ConsultingPage() {
       date: data.date,
       hours: data.hours,
       summary: data.summary,
+    });
+    load();
+  }
+
+  async function handleExpense(data: ExpenseFormData) {
+    await api.post(`/consulting/engagements/${data.engagementId}/expenses`, {
+      date: data.date,
+      amountCents: data.amountCents,
+      category: data.category,
+      description: data.description,
     });
     load();
   }
@@ -70,21 +88,26 @@ export function ConsultingPage() {
             </div>
             <div>
               <div className="text-slate-500">Billed</div>
-              <div className="font-medium text-slate-800">{e.effectiveRateCents ? formatCents(e.billableCents) : "—"}</div>
+              <div className="font-medium text-slate-800">{e.effectiveRateCents || e.billableCents > 0 ? formatCents(e.billableCents) : "—"}</div>
             </div>
             <div>
               <div className="text-slate-500">Owed</div>
               <div className={`font-semibold ${e.balanceCents > 0 ? "text-amber-700" : "text-emerald-700"}`}>
-                {e.effectiveRateCents ? formatCents(e.balanceCents) : "—"}
+                {e.effectiveRateCents || e.billableCents > 0 ? formatCents(e.balanceCents) : "—"}
               </div>
             </div>
           </div>
           {e.lastEntryDate && <div className="mt-2 text-xs text-slate-400">Last entry {formatDay(e.lastEntryDate)}</div>}
         </Link>
         {!view.readOnly && !e.archivedAt && (
-          <button onClick={() => setLogging(e.id)} className="mt-3 w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">
-            Log hours
-          </button>
+          <div className="mt-3 flex gap-2">
+            <button onClick={() => setLogging(e.id)} className="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">
+              Log hours
+            </button>
+            <button onClick={() => setExpensing(e.id)} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">
+              Add expense
+            </button>
+          </div>
         )}
       </div>
     );
@@ -150,6 +173,7 @@ export function ConsultingPage() {
       {creating && (
         <EngagementModal initial={null} defaultRateCents={user?.consultingRateCents ?? null} onClose={() => setCreating(false)} onSubmit={handleCreate} />
       )}
+      {expensing && <ExpenseModal engagementId={expensing} onClose={() => setExpensing(null)} onSubmit={handleExpense} />}
       {logging && (
         <LogHoursModal
           engagements={active.map((e) => ({ id: e.id, name: e.name }))}

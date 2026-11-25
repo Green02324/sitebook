@@ -117,7 +117,7 @@ export function Dashboard() {
                     <div className="text-xs text-slate-500">{formatHours(e.unpaidMinutes)} unpaid</div>
                   </div>
                   <span className={`text-sm font-semibold ${e.balanceCents > 0 ? "text-amber-700" : "text-emerald-700"}`}>
-                    {e.effectiveRateCents ? formatCents(e.balanceCents) : "—"}
+                    {e.effectiveRateCents || e.billableCents > 0 ? formatCents(e.balanceCents) : "—"}
                   </span>
                 </Link>
               ))}

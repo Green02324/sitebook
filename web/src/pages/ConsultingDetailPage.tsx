@@ -6,15 +6,17 @@ import { BackLink } from "../components/BackLink";
 import { PaidBadge } from "../components/PaidBadge";
 import {
   EngagementModal,
+  ExpenseModal,
   LogHoursModal,
   PaymentModal,
   type EngagementFormData,
+  type ExpenseFormData,
   type LogHoursData,
   type PaymentFormData,
 } from "../components/ConsultingModals";
 import { formatCents } from "../lib/money";
 import { formatDay, formatHours, slugify } from "../lib/consulting";
-import type { ConsultingBill, ConsultingEngagementDetail, ConsultingEntry, ConsultingPayment } from "../types";
+import type { ConsultingBill, ConsultingEngagementDetail, ConsultingEntry, ConsultingExpense, ConsultingPayment } from "../types";
 
 const smallBtn = "rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50";
 
@@ -35,6 +37,8 @@ export function ConsultingDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [logging, setLogging] = useState(false);
   const [editingEntry, setEditingEntry] = useState<ConsultingEntry | null>(null);
+  const [addingExpense, setAddingExpense] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<ConsultingExpense | null>(null);
   const [paying, setPaying] = useState(false);
   const [editingPayment, setEditingPayment] = useState<ConsultingPayment | null>(null);
   const [editingEngagement, setEditingEngagement] = useState(false);
@@ -69,7 +73,10 @@ export function ConsultingDetailPage() {
   const s = data.summary;
   const rate = data.effectiveRateCents;
   const bills = [...s.bills].sort((a, b) => b.number - a.number);
-  const hasOpenHours = s.bills.some((b) => !b.closed && b.entries.length > 0);
+  const hasCharges = (b: ConsultingBill) => b.entries.length > 0 || b.expenses.length > 0;
+  const hasOpenCharges = s.bills.some((b) => !b.closed && hasCharges(b));
+  // Dollar figures are meaningful with a rate, or once there are expenses.
+  const showMoney = !!rate || s.billableCents > 0;
 
   function pdfPath(billId?: string) {
     return withViewParams(`${base}/pdf${billId ? `?billId=${billId}` : ""}`, view);
@@ -127,7 +134,7 @@ export function ConsultingDetailPage() {
     const lines = [
       `Hello${data!.clientName ? ` ${data!.clientName}` : ""},`,
       "",
-      `${bill ? `Bill ${bill.number}` : "My time log"} for ${data!.name}: ${formatHours(minutes)}${rate ? ` — ${formatCents(amount)}` : ""}.`,
+      `${bill ? `Bill ${bill.number}` : "My time log"} for ${data!.name}: ${formatHours(minutes)}${amount > 0 ? ` — ${formatCents(amount)} total` : ""}.`,
       "",
       "(Please see the attached PDF for the detail.)",
     ];
@@ -175,6 +182,9 @@ export function ConsultingDetailPage() {
             <button className={smallBtn} onClick={() => setEditingEngagement(true)}>
               Edit
             </button>
+            <button onClick={() => setAddingExpense(true)} className={smallBtn}>
+              Add expense
+            </button>
             <button onClick={() => setLogging(true)} className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">
               Log hours
             </button>
@@ -186,9 +196,10 @@ export function ConsultingDetailPage() {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Stat label="Unpaid hours" value={formatHours(s.unpaidMinutes)} tone="text-amber-700" />
-        <Stat label="Balance due" value={rate ? formatCents(s.balanceCents) : "—"} tone={s.balanceCents > 0 ? "text-amber-700" : "text-emerald-700"} />
+        <Stat label="Balance due" value={showMoney ? formatCents(s.balanceCents) : "—"} tone={s.balanceCents > 0 ? "text-amber-700" : "text-emerald-700"} />
         <Stat label="Total hours" value={formatHours(s.totalMinutes)} />
-        <Stat label="Total billable" value={rate ? formatCents(s.billableCents) : "—"} />
+        <Stat label="Total billable" value={showMoney ? formatCents(s.billableCents) : "—"} />
+        {s.expenseCents > 0 && <Stat label="Expenses (in total)" value={formatCents(s.expenseCents)} />}
         <Stat label="Paid so far" value={formatCents(s.paidCents)} tone="text-emerald-700" />
         {s.creditCents > 0 && <Stat label="Credit (overpaid)" value={formatCents(s.creditCents)} tone="text-emerald-700" />}
       </div>
@@ -207,7 +218,7 @@ export function ConsultingDetailPage() {
 
       {bills.length === 0 && (
         <div className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">
-          No hours logged yet.
+          Nothing logged yet.
         </div>
       )}
 
@@ -219,11 +230,11 @@ export function ConsultingDetailPage() {
               <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${b.closed ? "bg-sky-100 text-sky-800" : "bg-indigo-100 text-indigo-800"}`}>
                 {b.closed ? "Sent" : "Open"}
               </span>
-              {b.entries.length > 0 && <PaidBadge status={b.status} />}
+              {hasCharges(b) && <PaidBadge status={b.status} />}
             </div>
             <div className="text-right text-sm">
               <span className="font-semibold text-slate-900">{formatHours(b.minutes)}</span>
-              {rate && <span className="text-slate-500"> · {formatCents(b.amountCents)}</span>}
+              {(rate || b.amountCents > 0) && <span className="text-slate-500"> · {formatCents(b.amountCents)}</span>}
             </div>
           </div>
 
@@ -258,14 +269,44 @@ export function ConsultingDetailPage() {
                 </div>
               </div>
             ))}
-            {b.entries.length === 0 && <div className="px-4 py-3 text-sm text-slate-500">No hours on this bill.</div>}
+            {b.expenses.map((x) => (
+              <div key={x.id} className="px-4 py-3">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-sm font-medium text-slate-800">
+                    {formatDay(x.date)}
+                    <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{x.category}</span>
+                  </span>
+                  <span className="text-sm text-slate-700">{formatCents(x.amountCents)}</span>
+                </div>
+                {x.description && <div className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{x.description}</div>}
+                <div className="mt-1 flex items-center justify-between">
+                  {x.status !== "UNPAID" ? <PaidBadge status={x.status} /> : <span />}
+                  {!view.readOnly && (
+                    <span className="flex gap-3 text-xs font-medium">
+                      <button onClick={() => setEditingExpense(x)} className="text-indigo-600 hover:underline">
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm("Delete this expense?")) mutate(() => api.delete<ConsultingEngagementDetail>(`${base}/expenses/${x.id}`));
+                        }}
+                        className="text-rose-600 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+            {!hasCharges(b) && <div className="px-4 py-3 text-sm text-slate-500">Nothing on this bill.</div>}
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-3">
-            {b.entries.length > 0 ? <ExportButtons bill={b} /> : <span />}
+            {hasCharges(b) ? <ExportButtons bill={b} /> : <span />}
             {!view.readOnly && (
               <div className="flex gap-2">
-                {b.entries.length === 0 && (
+                {!hasCharges(b) && (
                   <button
                     className={smallBtn}
                     onClick={() => mutate(() => api.delete<ConsultingEngagementDetail>(`${base}/bills/${b.id}`))}
@@ -273,7 +314,7 @@ export function ConsultingDetailPage() {
                     Remove bill
                   </button>
                 )}
-                {b.entries.length > 0 && (
+                {hasCharges(b) && (
                   <button
                     className={smallBtn}
                     onClick={() => mutate(() => api.put<ConsultingEngagementDetail>(`${base}/bills/${b.id}`, { closed: !b.closed }))}
@@ -354,10 +395,43 @@ export function ConsultingDetailPage() {
           }}
         />
       )}
+      {addingExpense && (
+        <ExpenseModal
+          engagementId={data.id}
+          onClose={() => setAddingExpense(false)}
+          onSubmit={async (d: ExpenseFormData) => {
+            const next = await api.post<ConsultingEngagementDetail>(`${base}/expenses`, {
+              date: d.date,
+              amountCents: d.amountCents,
+              category: d.category,
+              description: d.description,
+            });
+            setData(next);
+          }}
+        />
+      )}
+      {editingExpense && (
+        <ExpenseModal
+          engagementId={data.id}
+          expense={editingExpense}
+          bills={bills}
+          onClose={() => setEditingExpense(null)}
+          onSubmit={async (d: ExpenseFormData) => {
+            const next = await api.put<ConsultingEngagementDetail>(`${base}/expenses/${editingExpense.id}`, {
+              date: d.date,
+              amountCents: d.amountCents,
+              category: d.category,
+              description: d.description,
+              billId: d.billId,
+            });
+            setData(next);
+          }}
+        />
+      )}
       {paying && (
         <PaymentModal
           balanceCents={s.balanceCents}
-          canCloseBill={hasOpenHours}
+          canCloseBill={hasOpenCharges}
           onClose={() => setPaying(false)}
           onSubmit={async (d: PaymentFormData) => {
             const next = await api.post<ConsultingEngagementDetail>(`${base}/payments`, d);
@@ -406,7 +480,7 @@ export function ConsultingDetailPage() {
           <button
             className="font-medium text-rose-600 hover:underline"
             onClick={async () => {
-              if (!confirm(`Delete "${data.name}" and ALL of its hours, bills and payments? This cannot be undone.`)) return;
+              if (!confirm(`Delete "${data.name}" and ALL of its hours, expenses, bills and payments? This cannot be undone.`)) return;
               await api.delete(base);
               navigate("/consulting");
             }}

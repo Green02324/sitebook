@@ -33,12 +33,13 @@ function parseRate(value: unknown): { ok: true; value: number | null } | { ok: f
 }
 
 type EngagementFull = Prisma.ConsultingEngagementGetPayload<{
-  include: { bills: true; entries: true; payments: true; user: { select: { consultingRateCents: true; name: true } } };
+  include: { bills: true; entries: true; expenses: true; payments: true; user: { select: { consultingRateCents: true; name: true } } };
 }>;
 
 const fullInclude = {
   bills: true,
   entries: true,
+  expenses: true,
   payments: true,
   user: { select: { consultingRateCents: true, name: true } },
 } as const;
@@ -61,6 +62,7 @@ function summarize(e: EngagementFull): EngagementSummary {
   return summarizeEngagement({
     bills: e.bills,
     entries: e.entries,
+    expenses: e.expenses,
     payments: e.payments,
     currentRateCents: effectiveRate(e),
   });
@@ -77,7 +79,10 @@ function openBills<B extends { number: number; closedAt: Date | null }>(e: { bil
 function headline(e: EngagementFull) {
   const s = summarize(e);
   const open = openBills(e)[0];
-  const lastEntry = e.entries.reduce<Date | null>((latest, x) => (latest === null || x.date > latest ? x.date : latest), null);
+  const lastEntry = [...e.entries, ...e.expenses].reduce<Date | null>(
+    (latest, x) => (latest === null || x.date > latest ? x.date : latest),
+    null,
+  );
   return {
     id: e.id,
     name: e.name,
@@ -91,6 +96,7 @@ function headline(e: EngagementFull) {
     lastEntryDate: lastEntry ? lastEntry.toISOString().slice(0, 10) : null,
     totalMinutes: s.totalMinutes,
     billableCents: s.billableCents,
+    expenseCents: s.expenseCents,
     paidCents: s.paidCents,
     balanceCents: s.balanceCents,
     creditCents: s.creditCents,
@@ -122,6 +128,24 @@ async function freezeRates(tx: Prisma.TransactionClient, billId: string, rateCen
 async function closeBill(tx: Prisma.TransactionClient, billId: string, rateCents: number | null) {
   await tx.consultingBill.update({ where: { id: billId }, data: { closedAt: new Date() } });
   await freezeRates(tx, billId, rateCents);
+}
+
+function hasCharges(e: EngagementFull, billId: string): boolean {
+  return e.entries.some((x) => x.billId === billId) || e.expenses.some((x) => x.billId === billId);
+}
+
+// Where new hours or expenses land: the bill asked for, else the open one, else
+// a freshly numbered bill.
+async function targetBill(tx: Prisma.TransactionClient, e: EngagementFull, billId: unknown) {
+  if (billId) {
+    const asked = e.bills.find((b) => b.id === billId);
+    if (!asked) throw new HttpError(400, "That bill doesn't belong to this engagement");
+    return asked;
+  }
+  const open = openBills(e)[0];
+  if (open) return open;
+  const nextNumber = e.bills.reduce((m, b) => Math.max(m, b.number), 0) + 1;
+  return tx.consultingBill.create({ data: { engagementId: e.id, number: nextNumber } });
 }
 
 // ---------------------------------------------------------------------------
@@ -245,16 +269,7 @@ router.post(
     const rate = effectiveRate(e);
 
     await prisma.$transaction(async (tx) => {
-      let bill = body.billId
-        ? e.bills.find((b) => b.id === body.billId)
-        : openBills(e)[0];
-      if (body.billId && !bill) {
-        throw new HttpError(400, "That bill doesn't belong to this engagement");
-      }
-      if (!bill) {
-        const nextNumber = e.bills.reduce((m, b) => Math.max(m, b.number), 0) + 1;
-        bill = await tx.consultingBill.create({ data: { engagementId: e.id, number: nextNumber } });
-      }
+      const bill = await targetBill(tx, e, body.billId);
       await tx.consultingEntry.create({
         data: {
           engagementId: e.id,
@@ -331,6 +346,116 @@ router.delete(
 );
 
 // ---------------------------------------------------------------------------
+// Expenses (materials, fees and other costs to bill back)
+
+const EXPENSE_CATEGORIES = ["Materials", "Fee", "Travel", "Other"];
+
+router.post(
+  "/engagements/:id/expenses",
+  ah(async (req, res) => {
+    const e = await findForWrite(req, req.params.id);
+    if (!e) return notFound(res);
+    const body = req.body as Record<string, unknown>;
+
+    const date = parseDate(body.date);
+    if (!date) {
+      res.status(400).json({ error: "A valid date is required" });
+      return;
+    }
+    try {
+      assertPositiveCents(body.amountCents as number);
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
+      return;
+    }
+    if (!EXPENSE_CATEGORIES.includes(body.category as string)) {
+      res.status(400).json({ error: "Choose an expense type" });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const bill = await targetBill(tx, e, body.billId);
+      await tx.consultingExpense.create({
+        data: {
+          engagementId: e.id,
+          billId: bill.id,
+          date,
+          amountCents: body.amountCents as number,
+          category: body.category as string,
+          description: cleanText(body.description),
+        },
+      });
+    });
+
+    const fresh = await findForWrite(req, e.id);
+    res.status(201).json(detail(fresh!));
+  }),
+);
+
+router.put(
+  "/engagements/:id/expenses/:expenseId",
+  ah(async (req, res) => {
+    const e = await findForWrite(req, req.params.id);
+    if (!e) return notFound(res);
+    const expense = e.expenses.find((x) => x.id === req.params.expenseId);
+    if (!expense) return notFound(res, "Expense");
+    const body = req.body as Record<string, unknown>;
+    const data: Prisma.ConsultingExpenseUncheckedUpdateInput = {};
+
+    if (body.date !== undefined) {
+      const date = parseDate(body.date);
+      if (!date) {
+        res.status(400).json({ error: "A valid date is required" });
+        return;
+      }
+      data.date = date;
+    }
+    if (body.amountCents !== undefined) {
+      try {
+        assertPositiveCents(body.amountCents as number);
+      } catch (err) {
+        res.status(400).json({ error: (err as Error).message });
+        return;
+      }
+      data.amountCents = body.amountCents as number;
+    }
+    if (body.category !== undefined) {
+      if (!EXPENSE_CATEGORIES.includes(body.category as string)) {
+        res.status(400).json({ error: "Choose an expense type" });
+        return;
+      }
+      data.category = body.category as string;
+    }
+    if (body.description !== undefined) data.description = cleanText(body.description);
+    if (body.billId !== undefined && body.billId !== expense.billId) {
+      const target = e.bills.find((b) => b.id === body.billId);
+      if (!target) {
+        res.status(400).json({ error: "That bill doesn't belong to this engagement" });
+        return;
+      }
+      data.billId = target.id;
+    }
+
+    await prisma.consultingExpense.update({ where: { id: expense.id }, data });
+    const fresh = await findForWrite(req, e.id);
+    res.json(detail(fresh!));
+  }),
+);
+
+router.delete(
+  "/engagements/:id/expenses/:expenseId",
+  ah(async (req, res) => {
+    const e = await findForWrite(req, req.params.id);
+    if (!e) return notFound(res);
+    const expense = e.expenses.find((x) => x.id === req.params.expenseId);
+    if (!expense) return notFound(res, "Expense");
+    await prisma.consultingExpense.delete({ where: { id: expense.id } });
+    const fresh = await findForWrite(req, e.id);
+    res.json(detail(fresh!));
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // Bills
 
 // Closes the current open bill by hand ("I've sent this one off").
@@ -339,9 +464,9 @@ router.post(
   ah(async (req, res) => {
     const e = await findForWrite(req, req.params.id);
     if (!e) return notFound(res);
-    const target = openBills(e).find((b) => e.entries.some((x) => x.billId === b.id));
+    const target = openBills(e).find((b) => hasCharges(e, b.id));
     if (!target) {
-      res.status(400).json({ error: "There are no open hours to bill" });
+      res.status(400).json({ error: "There is nothing open to bill" });
       return;
     }
     await prisma.$transaction((tx) => closeBill(tx, target.id, effectiveRate(e)));
@@ -379,8 +504,8 @@ router.delete(
     if (!e) return notFound(res);
     const bill = e.bills.find((b) => b.id === req.params.billId);
     if (!bill) return notFound(res, "Bill");
-    if (e.entries.some((x) => x.billId === bill.id)) {
-      res.status(409).json({ error: "Move or delete this bill's hours first" });
+    if (hasCharges(e, bill.id)) {
+      res.status(409).json({ error: "Move or delete this bill's hours and expenses first" });
       return;
     }
     await prisma.consultingBill.delete({ where: { id: bill.id } });
@@ -418,7 +543,7 @@ router.post(
       // A payment settles up the bill in progress, so the next hours begin the
       // next one. Skipped (or unticked) when there's nothing open to close.
       if (body.closeBill !== false) {
-        const target = openBills(e).find((b) => e.entries.some((x) => x.billId === b.id));
+        const target = openBills(e).find((b) => hasCharges(e, b.id));
         if (target) await closeBill(tx, target.id, effectiveRate(e));
       }
     });
@@ -495,11 +620,17 @@ router.get(
     if (billId && bills.length === 0) return notFound(res, "Bill");
 
     const sections: ConsultingPdfSection[] = bills
-      .filter((b) => b.entries.length > 0 || billId)
+      .filter((b) => b.entries.length > 0 || b.expenses.length > 0 || billId)
       .map((b) => ({
         title: `Bill ${b.number}`,
         minutes: b.minutes,
         amountCents: b.amountCents,
+        expenses: b.expenses.map((x) => ({
+          date: x.date,
+          category: x.category,
+          description: x.description,
+          amountCents: x.amountCents,
+        })),
         entries: b.entries.map((x) => ({
           date: x.date,
           minutes: x.minutes,
@@ -524,6 +655,7 @@ router.get(
       sections,
       totalMinutes,
       totalCents,
+      expenseCents: bills.reduce((n, b) => n + b.expenseCents, 0),
       paidCents,
       balanceCents: Math.max(0, totalCents - paidCents),
       payments: billId

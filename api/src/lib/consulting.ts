@@ -15,6 +15,16 @@ export interface EntryInput {
   rateCents: number | null;
 }
 
+export interface ExpenseInput {
+  id: string;
+  billId: string;
+  date: Date;
+  createdAt: Date;
+  amountCents: number;
+  category: string;
+  description: string | null;
+}
+
 export interface BillInput {
   id: string;
   number: number;
@@ -41,21 +51,37 @@ export interface EntrySummary {
   status: PaidStatus;
 }
 
+export interface ExpenseSummary {
+  id: string;
+  billId: string;
+  date: string;
+  category: string;
+  description: string | null;
+  amountCents: number;
+  paidCents: number;
+  status: PaidStatus;
+}
+
 export interface BillSummary {
   id: string;
   number: number;
   closed: boolean;
   closedAt: string | null;
   minutes: number;
+  // Hours and expenses together; expenseCents is the expense share of it.
   amountCents: number;
+  expenseCents: number;
   paidCents: number;
   status: PaidStatus;
   entries: EntrySummary[];
+  expenses: ExpenseSummary[];
 }
 
 export interface EngagementSummary {
   totalMinutes: number;
   billableCents: number;
+  // The part of billableCents that is expenses rather than time.
+  expenseCents: number;
   paidCents: number;
   // Billable minus paid. Never negative; an overpayment shows as creditCents.
   balanceCents: number;
@@ -83,36 +109,65 @@ function statusFor(amountCents: number, paidCents: number): PaidStatus {
   return "UNPAID";
 }
 
-// Payments are applied to the oldest hours first — bill by bill in number
-// order, and by date within a bill — so one check that overshoots a bill
-// carries straight on into the next one's hours.
+// Payments are applied to the oldest charges first — bill by bill in number
+// order, and by date within a bill, hours and expenses alike — so one check that
+// overshoots a bill carries straight on into the next one.
 export function summarizeEngagement(opts: {
   bills: BillInput[];
   entries: EntryInput[];
+  expenses: ExpenseInput[];
   payments: PaymentInput[];
   // Rate used for any entry that hasn't had one frozen onto it yet.
   currentRateCents: number | null;
 }): EngagementSummary {
-  const { bills, entries, payments, currentRateCents } = opts;
+  const { bills, entries, expenses, payments, currentRateCents } = opts;
   let remaining = payments.reduce((s, p) => s + p.amountCents, 0);
   const totalPaid = remaining;
 
   let totalMinutes = 0;
   let billable = 0;
+  let expenseTotal = 0;
   let unpaidMinutes = 0;
   let unratedMinutes = 0;
 
   const orderedBills = [...bills].sort((a, b) => a.number - b.number);
   const billSummaries: BillSummary[] = orderedBills.map((bill) => {
-    const billEntries = entries
-      .filter((e) => e.billId === bill.id)
-      .sort((a, b) => a.date.getTime() - b.date.getTime() || a.createdAt.getTime() - b.createdAt.getTime());
+    const charges = [
+      ...entries.filter((e) => e.billId === bill.id).map((e) => ({ entry: e, expense: null, date: e.date, createdAt: e.createdAt })),
+      ...expenses.filter((x) => x.billId === bill.id).map((x) => ({ entry: null, expense: x, date: x.date, createdAt: x.createdAt })),
+    ].sort((a, b) => a.date.getTime() - b.date.getTime() || a.createdAt.getTime() - b.createdAt.getTime());
 
     let billMinutes = 0;
     let billAmount = 0;
+    let billExpenses = 0;
     let billPaid = 0;
+    const entrySummaries: EntrySummary[] = [];
+    const expenseSummaries: ExpenseSummary[] = [];
 
-    const entrySummaries: EntrySummary[] = billEntries.map((e) => {
+    for (const charge of charges) {
+      if (charge.expense) {
+        const x = charge.expense;
+        const applied = Math.min(remaining, x.amountCents);
+        remaining -= applied;
+        billAmount += x.amountCents;
+        billExpenses += x.amountCents;
+        billPaid += applied;
+        billable += x.amountCents;
+        expenseTotal += x.amountCents;
+        expenseSummaries.push({
+          id: x.id,
+          billId: x.billId,
+          date: isoDate(x.date),
+          category: x.category,
+          description: x.description,
+          amountCents: x.amountCents,
+          paidCents: applied,
+          status: statusFor(x.amountCents, applied),
+        });
+        continue;
+      }
+
+      const e = charge.entry!;
       const rate = e.rateCents ?? currentRateCents;
       const amount = entryAmountCents(e.minutes, rate);
       const applied = Math.min(remaining, amount);
@@ -132,7 +187,7 @@ export function summarizeEngagement(opts: {
         unpaidMinutes += Math.round(e.minutes * (1 - applied / amount));
       }
 
-      return {
+      entrySummaries.push({
         id: e.id,
         billId: e.billId,
         date: isoDate(e.date),
@@ -142,8 +197,8 @@ export function summarizeEngagement(opts: {
         amountCents: amount,
         paidCents: applied,
         status: statusFor(amount, applied),
-      };
-    });
+      });
+    }
 
     return {
       id: bill.id,
@@ -152,15 +207,18 @@ export function summarizeEngagement(opts: {
       closedAt: bill.closedAt ? bill.closedAt.toISOString() : null,
       minutes: billMinutes,
       amountCents: billAmount,
+      expenseCents: billExpenses,
       paidCents: billPaid,
       status: statusFor(billAmount, billPaid),
       entries: entrySummaries,
+      expenses: expenseSummaries,
     };
   });
 
   return {
     totalMinutes,
     billableCents: billable,
+    expenseCents: expenseTotal,
     paidCents: totalPaid,
     balanceCents: Math.max(0, billable - totalPaid),
     creditCents: Math.max(0, totalPaid - billable),

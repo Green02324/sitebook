@@ -205,6 +205,19 @@ export interface ConsultingEntry {
   status: PaidStatus;
 }
 
+export type ExpenseCategory = "Materials" | "Fee" | "Travel" | "Other";
+
+export interface ConsultingExpense {
+  id: string;
+  billId: string;
+  date: string;
+  category: ExpenseCategory;
+  description: string | null;
+  amountCents: number;
+  paidCents: number;
+  status: PaidStatus;
+}
+
 export interface ConsultingBill {
   id: string;
   number: number;
@@ -212,14 +225,17 @@ export interface ConsultingBill {
   closedAt: string | null;
   minutes: number;
   amountCents: number;
+  expenseCents: number;
   paidCents: number;
   status: PaidStatus;
   entries: ConsultingEntry[];
+  expenses: ConsultingExpense[];
 }
 
 export interface ConsultingSummary {
   totalMinutes: number;
   billableCents: number;
+  expenseCents: number;
   paidCents: number;
   balanceCents: number;
   creditCents: number;
@@ -241,6 +257,7 @@ export interface ConsultingEngagementHeadline {
   lastEntryDate: string | null;
   totalMinutes: number;
   billableCents: number;
+  expenseCents: number;
   paidCents: number;
   balanceCents: number;
   creditCents: number;

@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Modal } from "./Modal";
 import { centsToInputValue, formatCents, toCents } from "../lib/money";
 import { hoursValue, todayLocal } from "../lib/consulting";
-import type { ConsultingBill, ConsultingEntry } from "../types";
+import type { ConsultingBill, ConsultingEntry, ConsultingExpense, ExpenseCategory } from "../types";
 
 const inputClass = "mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-base sm:py-1.5 sm:text-sm";
 const labelClass = "text-sm font-medium text-slate-700";
@@ -238,6 +238,129 @@ export function LogHoursModal({
 
 // ---------------------------------------------------------------------------
 
+export interface ExpenseFormData {
+  engagementId: string;
+  date: string;
+  amountCents: number;
+  category: ExpenseCategory;
+  description: string | null;
+  billId?: string;
+}
+
+const EXPENSE_CATEGORIES: ExpenseCategory[] = ["Materials", "Fee", "Travel", "Other"];
+
+export function ExpenseModal({
+  engagementId,
+  expense,
+  bills,
+  onClose,
+  onSubmit,
+}: {
+  engagementId: string;
+  // Present when editing an existing expense.
+  expense?: ConsultingExpense;
+  bills?: ConsultingBill[];
+  onClose: () => void;
+  onSubmit: (data: ExpenseFormData) => Promise<void>;
+}) {
+  const [date, setDate] = useState(expense?.date ?? todayLocal());
+  const [amount, setAmount] = useState(expense ? centsToInputValue(expense.amountCents) : "");
+  const [category, setCategory] = useState<ExpenseCategory>(expense?.category ?? "Materials");
+  const [description, setDescription] = useState(expense?.description ?? "");
+  const [billId, setBillId] = useState(expense?.billId ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    let amountCents: number;
+    try {
+      amountCents = toCents(amount);
+      if (amountCents <= 0) throw new Error("Amount must be greater than zero");
+    } catch (err) {
+      setError((err as Error).message);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSubmit({
+        engagementId,
+        date,
+        amountCents,
+        category,
+        description: description.trim() || null,
+        billId: expense ? billId : undefined,
+      });
+      onClose();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title={expense ? "Edit Expense" : "Add Expense"} onClose={onClose}>
+      <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
+        <div className="grid grid-cols-2 gap-3">
+          <label className={labelClass}>
+            Date
+            <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />
+          </label>
+          <label className={labelClass}>
+            Amount
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0.01"
+              required
+              autoFocus
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className={inputClass}
+              placeholder="0.00"
+            />
+          </label>
+        </div>
+        <label className={labelClass}>
+          Type
+          <select value={category} onChange={(e) => setCategory(e.target.value as ExpenseCategory)} className={inputClass}>
+            {EXPENSE_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={labelClass}>
+          What was it for?
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className={inputClass} placeholder="e.g. Permit fee, lumber for mock-up" />
+        </label>
+        {expense && bills && bills.length > 1 && (
+          <label className={labelClass}>
+            Bill
+            <select value={billId} onChange={(e) => setBillId(e.target.value)} className={inputClass}>
+              {bills.map((b) => (
+                <option key={b.id} value={b.id}>
+                  Bill {b.number}
+                  {b.closed ? " (sent)" : " (open)"}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <div className="text-xs text-slate-500">This is added to what the client owes you.</div>
+        {error && <div className="text-sm text-rose-600">{error}</div>}
+        <FormButtons onClose={onClose} saving={saving} />
+      </form>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
 export interface PaymentFormData {
   date: string;
   amountCents: number;
@@ -321,11 +444,11 @@ export function PaymentModal({
           <label className="flex items-start gap-2 text-sm text-slate-700">
             <input type="checkbox" checked={closeBill} onChange={(e) => setCloseBill(e.target.checked)} className="mt-0.5 h-4 w-4" />
             <span>
-              Close the current bill — hours logged after this go on the next bill.
+              Close the current bill — hours and expenses added after this go on the next bill.
             </span>
           </label>
         )}
-        <div className="text-xs text-slate-500">Payments are applied to your oldest unpaid hours first, so one check can cover several bills.</div>
+        <div className="text-xs text-slate-500">Payments are applied to your oldest unpaid hours and expenses first, so one check can cover several bills.</div>
         {error && <div className="text-sm text-rose-600">{error}</div>}
         <FormButtons onClose={onClose} saving={saving} />
       </form>
