@@ -33,7 +33,7 @@ const INNER_CIRCUMFERENCE = 2 * Math.PI * INNER_RADIUS;
 // into it for each debit source (projects + overhead); whatever's left
 // uncovered — this light Apple-gray background — IS the profit. There's no
 // dedicated "income" wedge to draw.
-const LEFTOVER_COLOR = "#c7c7cc";
+// (The leftover ring is painted by .donut-leftover in index.css so it can follow the theme.)
 
 // Same rotating Apple-system palette used for sub-wedges in the expense
 // tracker — distinct from any single project's own outer-ring color.
@@ -101,7 +101,7 @@ export function DonutChart({ totalIncomeCents, netCents, slices, loadDetail }: D
           the card; SIZE stays the cap so it never blows up on desktop. */}
       <div className="relative aspect-square w-full" style={{ maxWidth: SIZE }}>
         <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="h-full w-full" style={{ transform: "rotate(-90deg)" }}>
-          <circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} fill="none" stroke={LEFTOVER_COLOR} strokeWidth={STROKE} />
+          <circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} fill="none" className="donut-leftover" strokeWidth={STROKE} />
           {expenseSegments.map((seg) => (
             <circle
               key={seg.key}
@@ -180,7 +180,7 @@ export function DonutChart({ totalIncomeCents, netCents, slices, loadDetail }: D
 
       <div className="flex flex-wrap justify-center gap-2.5">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ background: LEFTOVER_COLOR }} />
+          <span className="donut-leftover h-2.5 w-2.5 rounded-full" />
           Gross Income · {formatCents(totalIncomeCents)}
         </span>
         {visibleSlices.map((s) => (
@@ -188,7 +188,7 @@ export function DonutChart({ totalIncomeCents, netCents, slices, loadDetail }: D
             key={s.key}
             onClick={() => toggle(s.key)}
             className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200"
-            style={{ border: activeKey === s.key ? "1.5px solid #1e293b" : "1.5px solid transparent" }}
+            style={{ border: activeKey === s.key ? "1.5px solid var(--color-slate-800, #1e293b)" : "1.5px solid transparent" }}
           >
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
             {s.label} · {formatCents(s.amountCents)}

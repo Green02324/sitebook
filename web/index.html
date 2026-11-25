@@ -20,6 +20,17 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
 
+    <!-- Apply the saved theme before first paint so a dark-mode user never sees a white flash. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("sitebook-theme");
+          var dark = t === "dark" || (t !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) {}
+      })();
+    </script>
+
     <title>SiteBook</title>
   </head>
   <body>

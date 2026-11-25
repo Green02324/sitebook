@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { useView, withViewParams } from "../context/ViewContext";
 import { useIsMobile } from "../lib/useIsMobile";
 import { HOURS_LABEL, OVERHEAD_LABEL } from "../lib/labels";
+import { ThemeToggle } from "./ThemeToggle";
 import { api } from "../api";
 import type { Project } from "../types";
 
@@ -96,6 +97,7 @@ function NavContent({
       {/* Admin sits down here with Logout rather than among the day-to-day
           pages — it's account housekeeping, not part of the job workflow. */}
       <div className="border-t border-slate-800 p-2">
+        <ThemeToggle />
         {!readOnly && isAdmin && (
           <NavLink to="/admin" className={linkClass} onClick={onNavigate}>
             Admin
@@ -132,7 +134,7 @@ export function Sidebar() {
   if (isMobile) {
     return (
       <>
-        <div className="flex shrink-0 items-center justify-between bg-slate-900 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] text-white">
+        <div className="keep-dark flex shrink-0 items-center justify-between bg-slate-900 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] text-white">
           <span className="text-lg font-bold tracking-tight">SiteBook</span>
           <button onClick={() => setMobileOpen((o) => !o)} aria-label="Toggle menu" className="p-1 text-2xl leading-none">
             {mobileOpen ? "✕" : "☰"}
@@ -141,7 +143,7 @@ export function Sidebar() {
         {mobileOpen && (
           <div className="fixed inset-0 z-50 bg-black/40" onClick={() => setMobileOpen(false)}>
             <div
-              className="flex h-full w-64 flex-col overflow-y-auto bg-slate-900 pb-safe text-slate-200 shadow-xl"
+              className="keep-dark flex h-full w-64 flex-col overflow-y-auto bg-slate-900 pb-safe text-slate-200 shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="px-4 pb-5 pt-[calc(env(safe-area-inset-top)+1.25rem)] text-lg font-bold tracking-tight text-white">SiteBook</div>
@@ -154,7 +156,7 @@ export function Sidebar() {
   }
 
   return (
-    <div className="flex w-64 flex-shrink-0 flex-col bg-slate-900 text-slate-200">
+    <div className="keep-dark flex w-64 flex-shrink-0 flex-col bg-slate-900 text-slate-200">
       <div className="px-4 py-5 text-lg font-bold tracking-tight text-white">SiteBook</div>
       <NavContent prefix={prefix} isAdmin={isAdmin} readOnly={view.readOnly} onLogout={handleLogout} />
     </div>

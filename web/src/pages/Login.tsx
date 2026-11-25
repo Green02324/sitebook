@@ -26,7 +26,7 @@ export function Login() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-slate-100 px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-[calc(env(safe-area-inset-top)+1rem)]">
+    <div className="flex min-h-dvh items-center justify-center bg-slate-50 px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-[calc(env(safe-area-inset-top)+1rem)]">
       <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-md sm:p-8">
         <div className="mb-6 flex flex-col items-center gap-3">
           <Logo size={64} />
