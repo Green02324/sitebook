@@ -215,6 +215,7 @@ export interface ConsultingExpense {
   description: string | null;
   amountCents: number;
   paidCents: number;
+  reimbursedCents: number;
   status: PaidStatus;
 }
 
@@ -270,6 +271,8 @@ export interface ConsultingPayment {
   date: string;
   amountCents: number;
   note: string | null;
+  // Set when this payment reimbursed one particular expense.
+  expenseId: string | null;
 }
 
 export interface ConsultingEngagementDetail extends ConsultingEngagementHeadline {

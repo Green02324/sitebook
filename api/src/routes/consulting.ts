@@ -114,7 +114,13 @@ function detail(e: EngagementFull) {
     summary: s,
     payments: [...e.payments]
       .sort((a, b) => b.date.getTime() - a.date.getTime() || b.createdAt.getTime() - a.createdAt.getTime())
-      .map((p) => ({ id: p.id, date: p.date.toISOString().slice(0, 10), amountCents: p.amountCents, note: p.note })),
+      .map((p) => ({
+        id: p.id,
+        date: p.date.toISOString().slice(0, 10),
+        amountCents: p.amountCents,
+        note: p.note,
+        expenseId: p.expenseId,
+      })),
   };
 }
 
@@ -522,7 +528,7 @@ router.post(
   ah(async (req, res) => {
     const e = await findForWrite(req, req.params.id);
     if (!e) return notFound(res);
-    const body = req.body as { date?: unknown; amountCents?: unknown; note?: unknown; closeBill?: unknown };
+    const body = req.body as { date?: unknown; amountCents?: unknown; note?: unknown; closeBill?: unknown; expenseId?: unknown };
 
     const date = parseDate(body.date);
     if (!date) {
@@ -536,13 +542,21 @@ router.post(
       return;
     }
 
+    const expenseId = (body.expenseId as string | null | undefined) || null;
+    if (expenseId && !e.expenses.some((x) => x.id === expenseId)) {
+      res.status(400).json({ error: "That expense doesn't belong to this engagement" });
+      return;
+    }
+
     await prisma.$transaction(async (tx) => {
       await tx.consultingPayment.create({
-        data: { engagementId: e.id, date, amountCents: body.amountCents as number, note: cleanText(body.note) },
+        data: { engagementId: e.id, date, amountCents: body.amountCents as number, note: cleanText(body.note), expenseId },
       });
       // A payment settles up the bill in progress, so the next hours begin the
       // next one. Skipped (or unticked) when there's nothing open to close.
-      if (body.closeBill !== false) {
+      // A reimbursement for one expense isn't settling the bill, so it only
+      // closes one when explicitly asked.
+      if (expenseId ? body.closeBill === true : body.closeBill !== false) {
         const target = openBills(e).find((b) => hasCharges(e, b.id));
         if (target) await closeBill(tx, target.id, effectiveRate(e));
       }
@@ -560,8 +574,17 @@ router.put(
     if (!e) return notFound(res);
     const payment = e.payments.find((p) => p.id === req.params.paymentId);
     if (!payment) return notFound(res, "Payment");
-    const body = req.body as { date?: unknown; amountCents?: unknown; note?: unknown };
-    const data: Prisma.ConsultingPaymentUpdateInput = {};
+    const body = req.body as { date?: unknown; amountCents?: unknown; note?: unknown; expenseId?: unknown };
+    const data: Prisma.ConsultingPaymentUncheckedUpdateInput = {};
+
+    if (body.expenseId !== undefined) {
+      const expenseId = (body.expenseId as string | null) || null;
+      if (expenseId && !e.expenses.some((x) => x.id === expenseId)) {
+        res.status(400).json({ error: "That expense doesn't belong to this engagement" });
+        return;
+      }
+      data.expenseId = expenseId;
+    }
 
     if (body.date !== undefined) {
       const date = parseDate(body.date);
@@ -604,6 +627,16 @@ router.delete(
 // ---------------------------------------------------------------------------
 // PDF — one bill, or (without billId) the complete log
 
+function reimbursementLines(e: EngagementFull, expenseId: string): string[] {
+  return e.payments
+    .filter((p) => p.expenseId === expenseId)
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
+    .map((p) => {
+      const amount = (p.amountCents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+      return `Reimbursed ${amount} on ${p.date.toISOString().slice(0, 10)}${p.note ? ` (${p.note})` : ""}`;
+    });
+}
+
 function slug(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "engagement";
 }
@@ -628,7 +661,7 @@ router.get(
         expenses: b.expenses.map((x) => ({
           date: x.date,
           category: x.category,
-          description: x.description,
+          description: [x.description, ...reimbursementLines(e, x.id)].filter(Boolean).join("\n"),
           amountCents: x.amountCents,
         })),
         entries: b.entries.map((x) => ({
@@ -662,7 +695,14 @@ router.get(
         ? undefined
         : [...e.payments]
             .sort((a, b) => a.date.getTime() - b.date.getTime())
-            .map((p) => ({ date: p.date.toISOString().slice(0, 10), amountCents: p.amountCents, note: p.note })),
+            .map((p) => {
+              const expense = e.expenses.find((x) => x.id === p.expenseId);
+              return {
+                date: p.date.toISOString().slice(0, 10),
+                amountCents: p.amountCents,
+                note: [expense ? `Reimbursement: ${expense.category}` : null, p.note].filter(Boolean).join(" - ") || null,
+              };
+            }),
       hasUnrated: bills.some((b) => b.entries.some((x) => x.rateCents === null)),
     });
 

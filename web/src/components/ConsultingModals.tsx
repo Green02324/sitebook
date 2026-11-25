@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Modal } from "./Modal";
 import { centsToInputValue, formatCents, toCents } from "../lib/money";
-import { hoursValue, todayLocal } from "../lib/consulting";
+import { expenseLabel, formatDay, hoursValue, todayLocal } from "../lib/consulting";
 import type { ConsultingBill, ConsultingEntry, ConsultingExpense, ExpenseCategory } from "../types";
 
 const inputClass = "mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-base sm:py-1.5 sm:text-sm";
@@ -366,26 +366,47 @@ export interface PaymentFormData {
   amountCents: number;
   note: string | null;
   closeBill: boolean;
+  expenseId: string | null;
 }
 
 export function PaymentModal({
   initial,
+  expenses,
+  initialExpenseId,
   balanceCents,
   canCloseBill,
   onClose,
   onSubmit,
 }: {
   // Present when editing; the "close bill" option only applies to new payments.
-  initial?: { date: string; amountCents: number; note: string | null };
+  initial?: { date: string; amountCents: number; note: string | null; expenseId: string | null };
+  // Offered as targets for a reimbursement check.
+  expenses: ConsultingExpense[];
+  // Preselected when opened from an expense's "Add reimbursement".
+  initialExpenseId?: string;
   balanceCents: number;
   canCloseBill: boolean;
   onClose: () => void;
   onSubmit: (data: PaymentFormData) => Promise<void>;
 }) {
   const [date, setDate] = useState(initial?.date ?? todayLocal());
-  const [amount, setAmount] = useState(initial ? centsToInputValue(initial.amountCents) : "");
+  // Prefill with what's still to be reimbursed, so a matching check is one tap.
+  const outstanding = (id: string) => {
+    const x = expenses.find((item) => item.id === id);
+    const left = x ? x.amountCents - x.reimbursedCents : 0;
+    return left > 0 ? centsToInputValue(left) : "";
+  };
+  const [expenseId, setExpenseId] = useState(initial?.expenseId ?? initialExpenseId ?? "");
+  const [amount, setAmount] = useState(
+    initial ? centsToInputValue(initial.amountCents) : initialExpenseId ? outstanding(initialExpenseId) : "",
+  );
   const [note, setNote] = useState(initial?.note ?? "");
   const [closeBill, setCloseBill] = useState(true);
+
+  function chooseExpense(id: string) {
+    setExpenseId(id);
+    if (!initial && amount === "" && id) setAmount(outstanding(id));
+  }
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -402,7 +423,7 @@ export function PaymentModal({
     }
     setSaving(true);
     try {
-      await onSubmit({ date, amountCents, note: note.trim() || null, closeBill });
+      await onSubmit({ date, amountCents, note: note.trim() || null, expenseId: expenseId || null, closeBill: !expenseId && closeBill });
       onClose();
     } catch (err) {
       setError((err as Error).message);
@@ -415,6 +436,20 @@ export function PaymentModal({
     <Modal title={initial ? "Edit Payment" : "Record Payment"} onClose={onClose}>
       <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
         {!initial && <div className="text-sm text-slate-600">Currently owed: <strong>{formatCents(balanceCents)}</strong></div>}
+        {expenses.length > 0 && (
+          <label className={labelClass}>
+            Apply to
+            <select value={expenseId} onChange={(e) => chooseExpense(e.target.value)} className={inputClass}>
+              <option value="">Oldest unpaid charges (automatic)</option>
+              {expenses.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {formatDay(x.date)} · {expenseLabel(x)} · {formatCents(x.amountCents)}
+                  {x.reimbursedCents >= x.amountCents ? " (reimbursed)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <label className={labelClass}>
             Date received
@@ -440,7 +475,7 @@ export function PaymentModal({
           Note
           <input value={note} onChange={(e) => setNote(e.target.value)} className={inputClass} placeholder="e.g. Check #1042" />
         </label>
-        {!initial && canCloseBill && (
+        {!initial && canCloseBill && !expenseId && (
           <label className="flex items-start gap-2 text-sm text-slate-700">
             <input type="checkbox" checked={closeBill} onChange={(e) => setCloseBill(e.target.checked)} className="mt-0.5 h-4 w-4" />
             <span>
@@ -448,7 +483,11 @@ export function PaymentModal({
             </span>
           </label>
         )}
-        <div className="text-xs text-slate-500">Payments are applied to your oldest unpaid hours and expenses first, so one check can cover several bills.</div>
+        <div className="text-xs text-slate-500">
+          {expenseId
+            ? "This is recorded as reimbursement for that expense. Anything above its amount goes to your oldest unpaid charges."
+            : "Payments are applied to your oldest unpaid hours and expenses first, so one check can cover several bills."}
+        </div>
         {error && <div className="text-sm text-rose-600">{error}</div>}
         <FormButtons onClose={onClose} saving={saving} />
       </form>

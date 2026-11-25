@@ -238,13 +238,16 @@ model ConsultingExpense {
   description  String?
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
+  // Checks received specifically to reimburse this expense.
+  payments     ConsultingPayment[]
 
   @@index([engagementId, date])
   @@index([billId])
 }
 
 // Money received. Not tied to a single bill: payments are applied to the
-// oldest hours first, so one check can clear a bill and carry on into the next.
+// oldest charges first, so one check can clear a bill and carry on into the
+// next — unless it names an expense, which it then pays off before anything else.
 model ConsultingPayment {
   id           String               @id @default(cuid())
   engagementId String
@@ -252,7 +255,12 @@ model ConsultingPayment {
   date         DateTime             @db.Date
   amountCents  Int
   note         String?
+  // Set when the money is a reimbursement for one particular expense. Deleting
+  // the expense leaves the payment in place as an ordinary one.
+  expenseId    String?
+  expense      ConsultingExpense?   @relation(fields: [expenseId], references: [id], onDelete: SetNull)
   createdAt    DateTime             @default(now())
 
   @@index([engagementId, date])
+  @@index([expenseId])
 }

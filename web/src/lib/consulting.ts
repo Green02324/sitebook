@@ -25,6 +25,13 @@ export function formatDay(iso: string): string {
   return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+// "Materials – Lumber for mock-up", for pickers and payment rows.
+export function expenseLabel(x: { category: string; description: string | null }): string {
+  if (!x.description) return x.category;
+  const text = x.description.replace(/\s+/g, " ");
+  return `${x.category} – ${text.length > 40 ? `${text.slice(0, 40)}…` : text}`;
+}
+
 export function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "engagement";
 }

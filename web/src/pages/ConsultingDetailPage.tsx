@@ -15,7 +15,7 @@ import {
   type PaymentFormData,
 } from "../components/ConsultingModals";
 import { formatCents } from "../lib/money";
-import { formatDay, formatHours, slugify } from "../lib/consulting";
+import { expenseLabel, formatDay, formatHours, slugify } from "../lib/consulting";
 import type { ConsultingBill, ConsultingEngagementDetail, ConsultingEntry, ConsultingExpense, ConsultingPayment } from "../types";
 
 const smallBtn = "rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50";
@@ -40,6 +40,8 @@ export function ConsultingDetailPage() {
   const [addingExpense, setAddingExpense] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ConsultingExpense | null>(null);
   const [paying, setPaying] = useState(false);
+  // Set while recording a reimbursement started from an expense row.
+  const [reimbursing, setReimbursing] = useState<string | null>(null);
   const [editingPayment, setEditingPayment] = useState<ConsultingPayment | null>(null);
   const [editingEngagement, setEditingEngagement] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -75,6 +77,7 @@ export function ConsultingDetailPage() {
   const bills = [...s.bills].sort((a, b) => b.number - a.number);
   const hasCharges = (b: ConsultingBill) => b.entries.length > 0 || b.expenses.length > 0;
   const hasOpenCharges = s.bills.some((b) => !b.closed && hasCharges(b));
+  const allExpenses = bills.flatMap((b) => b.expenses);
   // Dollar figures are meaningful with a rate, or once there are expenses.
   const showMoney = !!rate || s.billableCents > 0;
 
@@ -279,6 +282,19 @@ export function ConsultingDetailPage() {
                   <span className="text-sm text-slate-700">{formatCents(x.amountCents)}</span>
                 </div>
                 {x.description && <div className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{x.description}</div>}
+                {data.payments
+                  .filter((p) => p.expenseId === x.id)
+                  .map((p) => (
+                    <div key={p.id} className="mt-1 text-xs font-medium text-emerald-700">
+                      Reimbursed {formatCents(p.amountCents)} on {formatDay(p.date)}
+                      {p.note && ` · ${p.note}`}
+                    </div>
+                  ))}
+                {!view.readOnly && x.reimbursedCents < x.amountCents && (
+                  <button onClick={() => setReimbursing(x.id)} className="mt-2 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700">
+                    Add reimbursement
+                  </button>
+                )}
                 <div className="mt-1 flex items-center justify-between">
                   {x.status !== "UNPAID" ? <PaidBadge status={x.status} /> : <span />}
                   {!view.readOnly && (
@@ -341,6 +357,13 @@ export function ConsultingDetailPage() {
           <div key={p.id} className="flex items-center justify-between gap-3 px-4 py-3">
             <div className="min-w-0">
               <div className="text-sm font-medium text-slate-800">{formatDay(p.date)}</div>
+              {allExpenses
+                .filter((x) => x.id === p.expenseId)
+                .map((x) => (
+                  <div key={x.id} className="truncate text-xs font-medium text-slate-600">
+                    Reimbursement: {expenseLabel(x)}
+                  </div>
+                ))}
               {p.note && <div className="truncate text-xs text-slate-500">{p.note}</div>}
             </div>
             <div className="flex items-center gap-3">
@@ -428,11 +451,16 @@ export function ConsultingDetailPage() {
           }}
         />
       )}
-      {paying && (
+      {(paying || reimbursing) && (
         <PaymentModal
+          expenses={allExpenses}
+          initialExpenseId={reimbursing ?? undefined}
           balanceCents={s.balanceCents}
           canCloseBill={hasOpenCharges}
-          onClose={() => setPaying(false)}
+          onClose={() => {
+            setPaying(false);
+            setReimbursing(null);
+          }}
           onSubmit={async (d: PaymentFormData) => {
             const next = await api.post<ConsultingEngagementDetail>(`${base}/payments`, d);
             setData(next);
@@ -442,6 +470,7 @@ export function ConsultingDetailPage() {
       {editingPayment && (
         <PaymentModal
           initial={editingPayment}
+          expenses={allExpenses}
           balanceCents={s.balanceCents}
           canCloseBill={false}
           onClose={() => setEditingPayment(null)}
@@ -450,6 +479,7 @@ export function ConsultingDetailPage() {
               date: d.date,
               amountCents: d.amountCents,
               note: d.note,
+              expenseId: d.expenseId,
             });
             setData(next);
           }}

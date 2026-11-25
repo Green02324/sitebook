@@ -33,6 +33,8 @@ export interface BillInput {
 
 export interface PaymentInput {
   amountCents: number;
+  // A reimbursement aimed at one expense; null/absent for ordinary payments.
+  expenseId?: string | null;
 }
 
 export type PaidStatus = "UNPAID" | "PARTIAL" | "PAID";
@@ -59,6 +61,8 @@ export interface ExpenseSummary {
   description: string | null;
   amountCents: number;
   paidCents: number;
+  // The share of paidCents that came from payments naming this expense.
+  reimbursedCents: number;
   status: PaidStatus;
 }
 
@@ -121,8 +125,23 @@ export function summarizeEngagement(opts: {
   currentRateCents: number | null;
 }): EngagementSummary {
   const { bills, entries, expenses, payments, currentRateCents } = opts;
-  let remaining = payments.reduce((s, p) => s + p.amountCents, 0);
-  const totalPaid = remaining;
+  // Money aimed at a particular expense goes there first. Whatever it doesn't
+  // need (and every ordinary payment) goes into the oldest-first pool.
+  const expenseAmounts = new Map(expenses.map((x) => [x.id, x.amountCents]));
+  const earmarked = new Map<string, number>();
+  let remaining = 0;
+  let totalPaid = 0;
+  for (const p of payments) {
+    totalPaid += p.amountCents;
+    let spare = p.amountCents;
+    if (p.expenseId && expenseAmounts.has(p.expenseId)) {
+      const already = earmarked.get(p.expenseId) ?? 0;
+      const used = Math.min(spare, expenseAmounts.get(p.expenseId)! - already);
+      earmarked.set(p.expenseId, already + used);
+      spare -= used;
+    }
+    remaining += spare;
+  }
 
   let totalMinutes = 0;
   let billable = 0;
@@ -147,8 +166,10 @@ export function summarizeEngagement(opts: {
     for (const charge of charges) {
       if (charge.expense) {
         const x = charge.expense;
-        const applied = Math.min(remaining, x.amountCents);
-        remaining -= applied;
+        const reimbursed = earmarked.get(x.id) ?? 0;
+        const fromPool = Math.min(remaining, x.amountCents - reimbursed);
+        remaining -= fromPool;
+        const applied = reimbursed + fromPool;
         billAmount += x.amountCents;
         billExpenses += x.amountCents;
         billPaid += applied;
@@ -162,6 +183,7 @@ export function summarizeEngagement(opts: {
           description: x.description,
           amountCents: x.amountCents,
           paidCents: applied,
+          reimbursedCents: reimbursed,
           status: statusFor(x.amountCents, applied),
         });
         continue;
